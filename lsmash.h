@@ -687,6 +687,7 @@ DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_QDMC_AUDIO,    LSMASH_4CC( 'Q', 'D', 'M', 
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_QCLP_AUDIO,    LSMASH_4CC( 'Q', 'c', 'l', 'p' ) );    /* Qualcomm PureVoice */
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_AC_3_AUDIO,    LSMASH_4CC( 'a', 'c', '-', '3' ) );    /* Digital Audio Compression Standard (AC-3, Enhanced AC-3) */
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_AGSM_AUDIO,    LSMASH_4CC( 'a', 'g', 's', 'm' ) );    /* GSM */
+DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_GSM_AUDIO,     LSMASH_4CC( 'g', 's', 'm', ' ' ) );    /* GSM */
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_ALAC_AUDIO,    LSMASH_4CC( 'a', 'l', 'a', 'c' ) );    /* Apple lossless audio codec */
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_ALAW_AUDIO,    LSMASH_4CC( 'a', 'l', 'a', 'w' ) );    /* a-Law 2:1 */
 DEFINE_QTFF_CODEC_TYPE( QT_CODEC_TYPE_CDX2_AUDIO,    LSMASH_4CC( 'c', 'd', 'x', '2' ) );    /* CD/XA 2:1 */

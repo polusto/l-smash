@@ -1901,6 +1901,7 @@ static int isom_set_qtff_template_audio_description( isom_audio_entry_t *audio, 
     if( !lsmash_check_codec_type_identical( audio->type, QT_CODEC_TYPE_MAC3_AUDIO )
      && !lsmash_check_codec_type_identical( audio->type, QT_CODEC_TYPE_MAC6_AUDIO )
      && !lsmash_check_codec_type_identical( audio->type, QT_CODEC_TYPE_AGSM_AUDIO )
+	 && !lsmash_check_codec_type_identical( audio->type, QT_CODEC_TYPE_GSM_AUDIO  )
      && !lsmash_check_codec_type_identical( audio->type, QT_CODEC_TYPE_ALAW_AUDIO )
      && !lsmash_check_codec_type_identical( audio->type, QT_CODEC_TYPE_ULAW_AUDIO ) )
     {
