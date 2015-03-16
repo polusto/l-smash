@@ -1,7 +1,7 @@
 /*****************************************************************************
  * a52.h:
  *****************************************************************************
- * Copyright (C) 2012-2014 L-SMASH project
+ * Copyright (C) 2012-2015 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -48,9 +48,9 @@ typedef struct
     lsmash_bits_t *bits;
 } eac3_info_t;
 
-static const uint32_t ac3_sample_rate_table  [4] = { 48000, 44100, 32000, 0 };
-static const uint32_t ac3_channel_count_table[8] = { 2, 1, 2, 3, 3, 4, 4, 5 };
-static const uint8_t eac3_audio_block_table  [4] = { 1, 2, 3, 6 };
+extern const uint32_t ac3_sample_rate_table  [4];
+extern const uint32_t ac3_channel_count_table[8];
+extern const uint8_t eac3_audio_block_table  [4];
 
 static inline uint32_t ac3_get_channel_count
 (

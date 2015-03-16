@@ -1,7 +1,7 @@
 /*****************************************************************************
  * description.c:
  *****************************************************************************
- * Copyright (C) 2012-2014 L-SMASH project
+ * Copyright (C) 2012-2015 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -51,6 +51,7 @@ static int isom_is_qt_video( lsmash_codec_type_t type )
         || lsmash_check_codec_type_identical( type, QT_CODEC_TYPE_APCS_VIDEO )
         || lsmash_check_codec_type_identical( type, QT_CODEC_TYPE_APCO_VIDEO )
         || lsmash_check_codec_type_identical( type, QT_CODEC_TYPE_AP4H_VIDEO )
+        || lsmash_check_codec_type_identical( type, QT_CODEC_TYPE_AP4X_VIDEO )
         || lsmash_check_codec_type_identical( type, QT_CODEC_TYPE_CFHD_VIDEO )
         || lsmash_check_codec_type_identical( type, QT_CODEC_TYPE_CIVD_VIDEO )
         || lsmash_check_codec_type_identical( type, QT_CODEC_TYPE_DVC_VIDEO )
@@ -98,6 +99,7 @@ static int isom_is_qt_video( lsmash_codec_type_t type )
         || lsmash_check_codec_type_identical( type, QT_CODEC_TYPE_ULY0_VIDEO )
         || lsmash_check_codec_type_identical( type, QT_CODEC_TYPE_ULH2_VIDEO )
         || lsmash_check_codec_type_identical( type, QT_CODEC_TYPE_ULH0_VIDEO )
+        || lsmash_check_codec_type_identical( type, QT_CODEC_TYPE_UQY2_VIDEO )
         || lsmash_check_codec_type_identical( type, QT_CODEC_TYPE_V210_VIDEO )
         || lsmash_check_codec_type_identical( type, QT_CODEC_TYPE_V216_VIDEO )
         || lsmash_check_codec_type_identical( type, QT_CODEC_TYPE_V308_VIDEO )
@@ -498,15 +500,16 @@ static int isom_construct_global_specific_header( lsmash_codec_specific_t *dst, 
     uint8_t *data = src->data.unstructured;
     uint64_t size = LSMASH_GET_BE32( data );
     data += ISOM_BASEBOX_COMMON_SIZE;
-    global->header_size = size - ISOM_BASEBOX_COMMON_SIZE;
     if( size == 1 )
     {
         size = LSMASH_GET_BE64( data );
         data += 8;
-        global->header_size -= 8;
     }
     if( size != src->size )
         return LSMASH_ERR_INVALID_DATA;
+    global->header_size = size - ISOM_BASEBOX_COMMON_SIZE;
+    if( data != src->data.unstructured + ISOM_BASEBOX_COMMON_SIZE )
+        global->header_size -= 8;   /* largesize */
     if( global->header_size )
     {
         global->header_data = lsmash_memdup( data, global->header_size );
@@ -631,6 +634,8 @@ lsmash_codec_specific_t *lsmash_convert_codec_specific_format( lsmash_codec_spec
     if( format == specific->format )
         return isom_duplicate_codec_specific_data( specific );
     lsmash_codec_specific_t *dst = lsmash_create_codec_specific_data( specific->type, format );
+    if( !dst )
+        return NULL;
     if( format == LSMASH_CODEC_SPECIFIC_FORMAT_UNSTRUCTURED )
         /* structured -> unstructured */
         switch( specific->type )
@@ -743,7 +748,7 @@ static inline void isom_set_default_compressorname( char *compressorname, lsmash
     {
         lsmash_codec_type_t type;
         char                name[33];
-    } compressorname_table[32] = { { LSMASH_CODEC_TYPE_INITIALIZER, { '\0' } } };
+    } compressorname_table[33] = { { LSMASH_CODEC_TYPE_INITIALIZER, { '\0' } } };
     if( compressorname_table[0].name[0] == '\0' )
     {
         int i = 0;
@@ -763,6 +768,7 @@ static inline void isom_set_default_compressorname( char *compressorname, lsmash
         ADD_COMPRESSORNAME_TABLE( QT_CODEC_TYPE_APCS_VIDEO,   "\023Apple ProRes 422 (LT)" );
         ADD_COMPRESSORNAME_TABLE( QT_CODEC_TYPE_APCO_VIDEO,   "\026Apple ProRes 422 (Proxy)" );
         ADD_COMPRESSORNAME_TABLE( QT_CODEC_TYPE_AP4H_VIDEO,   "\019Apple ProRes 4444" );
+        ADD_COMPRESSORNAME_TABLE( QT_CODEC_TYPE_AP4X_VIDEO,   "\022Apple ProRes 4444 XQ" );
         ADD_COMPRESSORNAME_TABLE( QT_CODEC_TYPE_DVPP_VIDEO,   "\014DVCPRO - PAL" );
         ADD_COMPRESSORNAME_TABLE( QT_CODEC_TYPE_DV5N_VIDEO,   "\017DVCPRO50 - NTSC" );
         ADD_COMPRESSORNAME_TABLE( QT_CODEC_TYPE_DV5P_VIDEO,   "\016DVCPRO50 - PAL" );
@@ -778,6 +784,7 @@ static inline void isom_set_default_compressorname( char *compressorname, lsmash
         ADD_COMPRESSORNAME_TABLE( QT_CODEC_TYPE_ULY2_VIDEO,   "\017Ut Video (ULY2)" );
         ADD_COMPRESSORNAME_TABLE( QT_CODEC_TYPE_ULH0_VIDEO,   "\017Ut Video (ULH0)" );
         ADD_COMPRESSORNAME_TABLE( QT_CODEC_TYPE_ULH2_VIDEO,   "\017Ut Video (ULH2)" );
+        ADD_COMPRESSORNAME_TABLE( QT_CODEC_TYPE_UQY2_VIDEO,   "\021Ut Video Pro (UQY2)" );
         ADD_COMPRESSORNAME_TABLE( LSMASH_CODEC_TYPE_UNSPECIFIED, { '\0' } );
 #undef ADD_COMPRESSORNAME_TABLE
     }
@@ -841,7 +848,8 @@ static int isom_check_valid_summary( lsmash_summary_t *summary )
           || lsmash_check_codec_type_identical( sample_type, QT_CODEC_TYPE_ULY0_VIDEO )
           || lsmash_check_codec_type_identical( sample_type, QT_CODEC_TYPE_ULY2_VIDEO )
           || lsmash_check_codec_type_identical( sample_type, QT_CODEC_TYPE_ULH0_VIDEO )
-          || lsmash_check_codec_type_identical( sample_type, QT_CODEC_TYPE_ULH2_VIDEO ) )
+          || lsmash_check_codec_type_identical( sample_type, QT_CODEC_TYPE_ULH2_VIDEO )
+          || lsmash_check_codec_type_identical( sample_type, QT_CODEC_TYPE_UQY2_VIDEO ) )
         required_data_type = LSMASH_CODEC_SPECIFIC_DATA_TYPE_CODEC_GLOBAL_HEADER;
     else if( lsmash_check_codec_type_identical( sample_type, QT_CODEC_TYPE_V216_VIDEO ) )
         required_data_type = LSMASH_CODEC_SPECIFIC_DATA_TYPE_QT_VIDEO_SIGNIFICANT_BITS;
@@ -1980,7 +1988,7 @@ static void isom_set_samplerate_division_of_media_timescale( isom_audio_entry_t 
         uint32_t orig_timescale = ((isom_mdia_t *)audio->parent->parent->parent->parent)->mdhd->timescale;
         uint32_t timescale      = orig_timescale;
         uint32_t i              = 2;
-        while( timescale > UINT16_MAX && timescale > 1 && i <= UINT32_MAX )
+        while( timescale > UINT16_MAX && timescale > 1 )
         {
             if( timescale % i == 0 )
                 timescale /= i;
@@ -2309,7 +2317,10 @@ lsmash_summary_t *isom_create_video_summary_from_description( isom_sample_entry_
         {
             isom_qt_color_table_t *src_ct = &visual->color_table;
             if( !src_ct->array )
+            {
+                lsmash_destroy_codec_specific_data( specific );
                 goto fail;
+            }
             uint16_t element_count = LSMASH_MIN( src_ct->size + 1, 256 );
             lsmash_qt_color_table_t *dst_ct = &data->color_table;
             dst_ct->seed  = src_ct->seed;
@@ -2573,26 +2584,38 @@ lsmash_summary_t *isom_create_audio_summary_from_description( isom_sample_entry_
                 data->format_flags = audio->formatSpecificFlags;
             else
             {
-                data->format_flags = 0;
+                data->format_flags = QT_LPCM_FORMAT_FLAG_BIG_ENDIAN | QT_LPCM_FORMAT_FLAG_SIGNED_INTEGER;
                 /* Here, don't override samplesize.
                  * We should trust samplesize field in the description for misused CODEC indentifier. */
                 lsmash_codec_type_t audio_type = audio->type;
-                if( lsmash_check_codec_type_identical( audio_type, QT_CODEC_TYPE_FL32_AUDIO )
-                 || lsmash_check_codec_type_identical( audio_type, QT_CODEC_TYPE_FL64_AUDIO ) )
-                    data->format_flags = QT_LPCM_FORMAT_FLAG_FLOAT;
-                else if( lsmash_check_codec_type_identical( audio_type, QT_CODEC_TYPE_TWOS_AUDIO )
-                      || lsmash_check_codec_type_identical( audio_type, QT_CODEC_TYPE_NONE_AUDIO )
-                      || lsmash_check_codec_type_identical( audio_type, QT_CODEC_TYPE_NOT_SPECIFIED ) )
+                if( lsmash_check_codec_type_identical( audio_type, QT_CODEC_TYPE_TWOS_AUDIO )
+                 || lsmash_check_codec_type_identical( audio_type, QT_CODEC_TYPE_NONE_AUDIO )
+                 || lsmash_check_codec_type_identical( audio_type, QT_CODEC_TYPE_NOT_SPECIFIED ) )
                 {
-                    if( lsmash_check_codec_type_identical( audio_type, QT_CODEC_TYPE_TWOS_AUDIO ) )
-                        data->format_flags = QT_LPCM_FORMAT_FLAG_BIG_ENDIAN | QT_AUDIO_FORMAT_FLAG_SIGNED_INTEGER;
-                    if( summary->sample_size > 8 )
-                        data->format_flags = QT_LPCM_FORMAT_FLAG_BIG_ENDIAN;
+                    if( summary->sample_size <= 8 )
+                        data->format_flags &= ~(QT_LPCM_FORMAT_FLAG_BIG_ENDIAN | QT_LPCM_FORMAT_FLAG_SIGNED_INTEGER);
+                }
+                else
+                {
+                    if( lsmash_check_codec_type_identical( audio_type, QT_CODEC_TYPE_FL32_AUDIO )
+                     || lsmash_check_codec_type_identical( audio_type, QT_CODEC_TYPE_FL64_AUDIO ) )
+                    {
+                        data->format_flags &= ~QT_LPCM_FORMAT_FLAG_SIGNED_INTEGER;
+                        data->format_flags |=  QT_LPCM_FORMAT_FLAG_FLOAT;
+                    }
+                    else if( lsmash_check_codec_type_identical( audio_type, QT_CODEC_TYPE_23NI_AUDIO )
+                          || lsmash_check_codec_type_identical( audio_type, QT_CODEC_TYPE_SOWT_AUDIO ) )
+                        data->format_flags &= ~QT_LPCM_FORMAT_FLAG_BIG_ENDIAN;
                 }
             }
             isom_wave_t *wave = (isom_wave_t *)isom_get_extension_box_format( &audio->extensions, QT_BOX_TYPE_WAVE );
-            if( wave && wave->enda && !wave->enda->littleEndian )
-                data->format_flags |= QT_LPCM_FORMAT_FLAG_BIG_ENDIAN;
+            if( wave && wave->enda )
+            {
+                if( wave->enda->littleEndian )
+                    data->format_flags &= ~QT_LPCM_FORMAT_FLAG_BIG_ENDIAN;
+                else
+                    data->format_flags |=  QT_LPCM_FORMAT_FLAG_BIG_ENDIAN;
+            }
             if( lsmash_add_entry( &summary->opaque->list, specific ) < 0 )
             {
                 lsmash_destroy_codec_specific_data( specific );
@@ -2706,11 +2729,6 @@ lsmash_summary_t *isom_create_audio_summary_from_description( isom_sample_entry_
                                 for( uint32_t i = 0; i < chan->numberChannelDescriptions; i++ )
                                 {
                                     isom_channel_description_t *channelDescriptions = (isom_channel_description_t *)(&chan->channelDescriptions[i]);
-                                    if( !channelDescriptions )
-                                    {
-                                        lsmash_bs_cleanup( bs );
-                                        goto fail;
-                                    }
                                     lsmash_bs_put_be32( bs, channelDescriptions->channelLabel );
                                     lsmash_bs_put_be32( bs, channelDescriptions->channelFlags );
                                     lsmash_bs_put_be32( bs, channelDescriptions->coordinates[0] );
@@ -2766,6 +2784,7 @@ lsmash_summary_t *isom_create_audio_summary_from_description( isom_sample_entry_
                     lsmash_codec_specific_t *specific = lsmash_create_codec_specific_data( type, LSMASH_CODEC_SPECIFIC_FORMAT_UNSTRUCTURED );
                     if( !specific )
                     {
+                        lsmash_free( box_data );
                         lsmash_bs_cleanup( bs );
                         goto fail;
                     }

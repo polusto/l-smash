@@ -1,7 +1,7 @@
 /*****************************************************************************
  * nalu_imp.c
  *****************************************************************************
- * Copyright (C) 2011-2014 L-SMASH project
+ * Copyright (C) 2011-2015 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -144,6 +144,11 @@ static lsmash_video_summary_t *h264_create_summary
      * max_au_length is set at the last of mp4sys_h264_probe function. */
     lsmash_codec_specific_t *cs = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_VIDEO_H264,
                                                                      LSMASH_CODEC_SPECIFIC_FORMAT_UNSTRUCTURED );
+    if( !cs )
+    {
+        lsmash_cleanup_summary( (lsmash_summary_t *)summary );
+        return NULL;
+    }
     cs->data.unstructured = lsmash_create_h264_specific_info( param, &cs->size );
     if( !cs->data.unstructured
      || lsmash_add_entry( &summary->opaque->list, cs ) < 0 )
@@ -234,7 +239,7 @@ static int h264_get_access_unit_internal
         uint64_t start_code_length;
         uint64_t trailing_zero_bytes;
         uint64_t nalu_length = h264_find_next_start_code( bs, &nuh, &start_code_length, &trailing_zero_bytes );
-        if( start_code_length <= NALU_SHORT_START_CODE_LENGTH && lsmash_bs_is_end( bs, nalu_length ) )
+        if( nalu_length == NALU_NO_START_CODE_FOUND )
         {
             /* For the last NALU.
              * This NALU already has been appended into the latest access unit and parsed. */
@@ -379,7 +384,8 @@ static int h264_get_access_unit_internal
 
 static inline void h264_importer_check_eof( importer_t *importer, h264_access_unit_t *au )
 {
-    if( lsmash_bs_is_end( importer->bs, 0 ) && au->incomplete_length == 0 )
+    /* AVC byte stream NALU consists of at least 4 bytes (start-code + NALU-header). */
+    if( lsmash_bs_is_end( importer->bs, NALU_SHORT_START_CODE_LENGTH ) && au->incomplete_length == 0 )
         importer->status = IMPORTER_EOF;
     else if( importer->status != IMPORTER_CHANGE )
         importer->status = IMPORTER_OK;
@@ -387,9 +393,9 @@ static inline void h264_importer_check_eof( importer_t *importer, h264_access_un
 
 static int h264_importer_get_accessunit
 (
-    importer_t      *importer,
-    uint32_t         track_number,
-    lsmash_sample_t *buffered_sample
+    importer_t       *importer,
+    uint32_t          track_number,
+    lsmash_sample_t **p_sample
 )
 {
     if( !importer->info )
@@ -399,13 +405,10 @@ static int h264_importer_get_accessunit
     h264_importer_t *h264_imp = (h264_importer_t *)importer->info;
     h264_info_t     *info     = &h264_imp->info;
     importer_status current_status = importer->status;
-    if( current_status == IMPORTER_ERROR || buffered_sample->length < h264_imp->max_au_length )
+    if( current_status == IMPORTER_ERROR )
         return LSMASH_ERR_NAMELESS;
     if( current_status == IMPORTER_EOF )
-    {
-        buffered_sample->length = 0;
-        return 0;
-    }
+        return IMPORTER_EOF;
     int err = h264_get_access_unit_internal( importer, 0 );
     if( err < 0 )
     {
@@ -433,41 +436,45 @@ static int h264_importer_get_accessunit
         }
         importer->status = IMPORTER_OK;
     }
+    lsmash_sample_t *sample = lsmash_create_sample( h264_imp->max_au_length );
+    if( !sample )
+        return LSMASH_ERR_MEMORY_ALLOC;
+    *p_sample = sample;
     h264_access_unit_t  *au      = &info->au;
     h264_picture_info_t *picture = &au->picture;
-    buffered_sample->dts = h264_imp->ts_list.timestamp[ au->number - 1 ].dts;
-    buffered_sample->cts = h264_imp->ts_list.timestamp[ au->number - 1 ].cts;
+    sample->dts = h264_imp->ts_list.timestamp[ au->number - 1 ].dts;
+    sample->cts = h264_imp->ts_list.timestamp[ au->number - 1 ].cts;
     if( au->number < h264_imp->num_undecodable )
-        buffered_sample->prop.leading = ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
+        sample->prop.leading = ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
     else
-        buffered_sample->prop.leading = picture->independent || buffered_sample->cts >= h264_imp->last_intra_cts
+        sample->prop.leading = picture->independent || sample->cts >= h264_imp->last_intra_cts
                                       ? ISOM_SAMPLE_IS_NOT_LEADING : ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
     if( picture->independent )
-        h264_imp->last_intra_cts = buffered_sample->cts;
+        h264_imp->last_intra_cts = sample->cts;
     if( h264_imp->composition_reordering_present && !picture->disposable && !picture->idr )
-        buffered_sample->prop.allow_earlier = QT_SAMPLE_EARLIER_PTS_ALLOWED;
-    buffered_sample->prop.independent = picture->independent    ? ISOM_SAMPLE_IS_INDEPENDENT : ISOM_SAMPLE_IS_NOT_INDEPENDENT;
-    buffered_sample->prop.disposable  = picture->disposable     ? ISOM_SAMPLE_IS_DISPOSABLE  : ISOM_SAMPLE_IS_NOT_DISPOSABLE;
-    buffered_sample->prop.redundant   = picture->has_redundancy ? ISOM_SAMPLE_HAS_REDUNDANCY : ISOM_SAMPLE_HAS_NO_REDUNDANCY;
-    buffered_sample->prop.post_roll.identifier = picture->frame_num;
+        sample->prop.allow_earlier = QT_SAMPLE_EARLIER_PTS_ALLOWED;
+    sample->prop.independent = picture->independent    ? ISOM_SAMPLE_IS_INDEPENDENT : ISOM_SAMPLE_IS_NOT_INDEPENDENT;
+    sample->prop.disposable  = picture->disposable     ? ISOM_SAMPLE_IS_DISPOSABLE  : ISOM_SAMPLE_IS_NOT_DISPOSABLE;
+    sample->prop.redundant   = picture->has_redundancy ? ISOM_SAMPLE_HAS_REDUNDANCY : ISOM_SAMPLE_HAS_NO_REDUNDANCY;
+    sample->prop.post_roll.identifier = picture->frame_num;
     if( picture->random_accessible )
     {
         if( picture->idr )
-            buffered_sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_SYNC;
+            sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_SYNC;
         else if( picture->recovery_frame_cnt )
         {
-            buffered_sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_POST_ROLL_START;
-            buffered_sample->prop.post_roll.complete = (picture->frame_num + picture->recovery_frame_cnt) % info->sps.MaxFrameNum;
+            sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_POST_ROLL_START;
+            sample->prop.post_roll.complete = (picture->frame_num + picture->recovery_frame_cnt) % info->sps.MaxFrameNum;
         }
         else
         {
-            buffered_sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_RAP;
+            sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_RAP;
             if( !picture->broken_link_flag )
-                buffered_sample->prop.ra_flags |= QT_SAMPLE_RANDOM_ACCESS_FLAG_PARTIAL_SYNC;
+                sample->prop.ra_flags |= QT_SAMPLE_RANDOM_ACCESS_FLAG_PARTIAL_SYNC;
         }
     }
-    buffered_sample->length = au->length;
-    memcpy( buffered_sample->data, au->data, au->length );
+    sample->length = au->length;
+    memcpy( sample->data, au->data, au->length );
     return current_status;
 }
 
@@ -569,6 +576,7 @@ static void nalu_generate_timestamps_from_poc
     /* Check if composition delay derived from reordering is present. */
     if( max_composition_delay == 0 )
     {
+        *composition_reordering_present = 0;
         for( uint32_t i = 1; i < num_access_units; i++ )
             if( npt[i].poc < npt[i - 1].poc )
             {
@@ -578,7 +586,6 @@ static void nalu_generate_timestamps_from_poc
     }
     else
         *composition_reordering_present = 1;
-    /* Generate timestamps. */
     if( *composition_reordering_present )
     {
         /* Generate timestamps.
@@ -602,6 +609,10 @@ static void nalu_generate_timestamps_from_poc
                 uint32_t composition_delay = timestamp[i].dts - i;
                 max_composition_delay = LSMASH_MAX( max_composition_delay, composition_delay );
             }
+    }
+    /* Generate timestamps. */
+    if( max_composition_delay )
+    {
         uint64_t *ts_buffer = (uint64_t *)lsmash_malloc( (num_access_units + max_composition_delay) * sizeof(uint64_t) );
         if( !ts_buffer )
         {
@@ -994,6 +1005,11 @@ static lsmash_video_summary_t *hevc_create_summary
      * max_au_length is set at the last of hevc_importer_probe function. */
     lsmash_codec_specific_t *specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_VIDEO_HEVC,
                                                                            LSMASH_CODEC_SPECIFIC_FORMAT_UNSTRUCTURED );
+    if( !specific )
+    {
+        lsmash_cleanup_summary( (lsmash_summary_t *)summary );
+        return NULL;
+    }
     specific->data.unstructured = lsmash_create_hevc_specific_info( param, &specific->size );
     if( !specific->data.unstructured
      || lsmash_add_entry( &summary->opaque->list, specific ) < 0 )
@@ -1078,7 +1094,7 @@ static int hevc_get_access_unit_internal
         uint64_t start_code_length;
         uint64_t trailing_zero_bytes;
         uint64_t nalu_length = hevc_find_next_start_code( bs, &nuh, &start_code_length, &trailing_zero_bytes );
-        if( start_code_length <= NALU_SHORT_START_CODE_LENGTH && lsmash_bs_is_end( bs, nalu_length ) )
+        if( nalu_length == NALU_NO_START_CODE_FOUND )
         {
             /* For the last NALU.
              * This NALU already has been appended into the latest access unit and parsed. */
@@ -1226,13 +1242,14 @@ static int hevc_get_access_unit_internal
 
 static inline void hevc_importer_check_eof( importer_t *importer, hevc_access_unit_t *au )
 {
-    if( lsmash_bs_is_end( importer->bs, 0 ) && au->incomplete_length == 0 )
+    /* HEVC byte stream NALU consists of at least 5 bytes (start-code + NALU-header). */
+    if( lsmash_bs_is_end( importer->bs, NALU_SHORT_START_CODE_LENGTH + 1 ) && au->incomplete_length == 0 )
         importer->status = IMPORTER_EOF;
     else if( importer->status != IMPORTER_CHANGE )
         importer->status = IMPORTER_OK;
 }
 
-static int hevc_importer_get_accessunit( importer_t *importer, uint32_t track_number, lsmash_sample_t *buffered_sample )
+static int hevc_importer_get_accessunit( importer_t *importer, uint32_t track_number, lsmash_sample_t **p_sample )
 {
     if( !importer->info )
         return LSMASH_ERR_NAMELESS;
@@ -1241,13 +1258,10 @@ static int hevc_importer_get_accessunit( importer_t *importer, uint32_t track_nu
     hevc_importer_t *hevc_imp = (hevc_importer_t *)importer->info;
     hevc_info_t     *info     = &hevc_imp->info;
     importer_status current_status = importer->status;
-    if( current_status == IMPORTER_ERROR || buffered_sample->length < hevc_imp->max_au_length )
+    if( current_status == IMPORTER_ERROR )
         return LSMASH_ERR_NAMELESS;
     if( current_status == IMPORTER_EOF )
-    {
-        buffered_sample->length = 0;
-        return 0;
-    }
+        return IMPORTER_EOF;
     int err = hevc_get_access_unit_internal( importer, 0 );
     if( err < 0 )
     {
@@ -1275,58 +1289,62 @@ static int hevc_importer_get_accessunit( importer_t *importer, uint32_t track_nu
         }
         importer->status = IMPORTER_OK;
     }
+    lsmash_sample_t *sample = lsmash_create_sample( hevc_imp->max_au_length );
+    if( !sample )
+        return LSMASH_ERR_MEMORY_ALLOC;
+    *p_sample = sample;
     hevc_access_unit_t  *au      = &info->au;
     hevc_picture_info_t *picture = &au->picture;
-    buffered_sample->dts = hevc_imp->ts_list.timestamp[ au->number - 1 ].dts;
-    buffered_sample->cts = hevc_imp->ts_list.timestamp[ au->number - 1 ].cts;
+    sample->dts = hevc_imp->ts_list.timestamp[ au->number - 1 ].dts;
+    sample->cts = hevc_imp->ts_list.timestamp[ au->number - 1 ].cts;
     /* Set property of disposability. */
     if( picture->sublayer_nonref && au->TemporalId == hevc_imp->max_TemporalId )
         /* Sub-layer non-reference pictures are not referenced by subsequent pictures of
          * the same sub-layer in decoding order. */
-        buffered_sample->prop.disposable = ISOM_SAMPLE_IS_DISPOSABLE;
+        sample->prop.disposable = ISOM_SAMPLE_IS_DISPOSABLE;
     else
-        buffered_sample->prop.disposable = ISOM_SAMPLE_IS_NOT_DISPOSABLE;
+        sample->prop.disposable = ISOM_SAMPLE_IS_NOT_DISPOSABLE;
     /* Set property of leading. */
     if( picture->radl || picture->rasl )
-        buffered_sample->prop.leading = picture->radl ? ISOM_SAMPLE_IS_DECODABLE_LEADING : ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
+        sample->prop.leading = picture->radl ? ISOM_SAMPLE_IS_DECODABLE_LEADING : ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
     else
     {
         if( au->number < hevc_imp->num_undecodable )
-            buffered_sample->prop.leading = ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
+            sample->prop.leading = ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
         else
         {
-            if( picture->independent || buffered_sample->cts >= hevc_imp->last_intra_cts )
-                buffered_sample->prop.leading = ISOM_SAMPLE_IS_NOT_LEADING;
+            if( picture->independent || sample->cts >= hevc_imp->last_intra_cts )
+                sample->prop.leading = ISOM_SAMPLE_IS_NOT_LEADING;
             else
-                buffered_sample->prop.leading = ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
+                sample->prop.leading = ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
         }
     }
     if( picture->independent )
-        hevc_imp->last_intra_cts = buffered_sample->cts;
+        hevc_imp->last_intra_cts = sample->cts;
     /* Set property of independence. */
-    buffered_sample->prop.independent = picture->independent ? ISOM_SAMPLE_IS_INDEPENDENT : ISOM_SAMPLE_IS_NOT_INDEPENDENT;
-    buffered_sample->prop.redundant   = ISOM_SAMPLE_HAS_NO_REDUNDANCY;
-    buffered_sample->prop.post_roll.identifier = picture->poc;
+    sample->prop.independent = picture->independent ? ISOM_SAMPLE_IS_INDEPENDENT : ISOM_SAMPLE_IS_NOT_INDEPENDENT;
+    sample->prop.redundant   = ISOM_SAMPLE_HAS_NO_REDUNDANCY;
+    sample->prop.post_roll.identifier = picture->poc;
     if( picture->random_accessible )
     {
         if( picture->irap )
         {
-            buffered_sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_SYNC;
+            sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_SYNC;
             if( picture->closed_rap )
-                buffered_sample->prop.ra_flags |= ISOM_SAMPLE_RANDOM_ACCESS_FLAG_CLOSED_RAP;
+                sample->prop.ra_flags |= ISOM_SAMPLE_RANDOM_ACCESS_FLAG_CLOSED_RAP;
             else
-                buffered_sample->prop.ra_flags |= ISOM_SAMPLE_RANDOM_ACCESS_FLAG_RAP;
+                sample->prop.ra_flags |= ISOM_SAMPLE_RANDOM_ACCESS_FLAG_RAP;
         }
         else if( picture->recovery_poc_cnt )
         {
-            buffered_sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_POST_ROLL_START;
-            buffered_sample->prop.post_roll.complete = picture->poc + picture->recovery_poc_cnt;
+            sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_POST_ROLL_START;
+            sample->prop.post_roll.complete = picture->poc + picture->recovery_poc_cnt;
         }
         else
-            buffered_sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_RAP;
+            sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_RAP;
     }
-    buffered_sample->length = au->length;
-    memcpy( buffered_sample->data, au->data, au->length );
+    sample->length = au->length;
+    memcpy( sample->data, au->data, au->length );
     return current_status;
 }
 

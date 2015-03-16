@@ -1,7 +1,7 @@
 /*****************************************************************************
- * bstream.h
+ * bytes.h
  *****************************************************************************
- * Copyright (C) 2010-2014 L-SMASH project
+ * Copyright (C) 2010-2015 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -142,6 +142,8 @@ uint64_t lsmash_bs_get_byte_to_64( lsmash_bs_t *bs );
 uint64_t lsmash_bs_get_be16_to_64( lsmash_bs_t *bs );
 uint64_t lsmash_bs_get_be24_to_64( lsmash_bs_t *bs );
 uint64_t lsmash_bs_get_be32_to_64( lsmash_bs_t *bs );
+uint16_t lsmash_bs_get_le16( lsmash_bs_t *bs );
+uint32_t lsmash_bs_get_le32( lsmash_bs_t *bs );
 int lsmash_bs_read( lsmash_bs_t *bs, uint32_t size );
 int lsmash_bs_read_data( lsmash_bs_t *bs, uint8_t *buf, size_t *size );
 int lsmash_bs_import_data( lsmash_bs_t *bs, void *data, uint32_t length );
@@ -153,129 +155,7 @@ static inline int lsmash_bs_is_end( lsmash_bs_t *bs, uint32_t offset )
     return bs->eof && (offset >= lsmash_bs_get_remaining_buffer_size( bs ));
 }
 
-/*---- bitstream ----*/
-typedef struct {
-    lsmash_bs_t* bs;
-    uint8_t store;
-    uint8_t cache;
-} lsmash_bits_t;
-
-void lsmash_bits_init( lsmash_bits_t* bits, lsmash_bs_t *bs );
-lsmash_bits_t *lsmash_bits_create( lsmash_bs_t *bs );
-void lsmash_bits_empty( lsmash_bits_t *bits );
-void lsmash_bits_put_align( lsmash_bits_t *bits );
-void lsmash_bits_get_align( lsmash_bits_t *bits );
-void lsmash_bits_cleanup( lsmash_bits_t *bits );
-
-/*---- bitstream writer ----*/
-void lsmash_bits_put( lsmash_bits_t *bits, uint32_t width, uint64_t value );
-uint64_t lsmash_bits_get( lsmash_bits_t *bits, uint32_t width );
-lsmash_bits_t *lsmash_bits_adhoc_create();
-void lsmash_bits_adhoc_cleanup( lsmash_bits_t *bits );
-void* lsmash_bits_export_data( lsmash_bits_t *bits, uint32_t *length );
-int lsmash_bits_import_data( lsmash_bits_t *bits, void *data, uint32_t length );
-
 /*---- basic I/O ----*/
 int lsmash_fread_wrapper( void *opaque, uint8_t *buf, int size );
 int lsmash_fwrite_wrapper( void *opaque, uint8_t *buf, int size );
 int64_t lsmash_fseek_wrapper( void *opaque, int64_t offset, int whence );
-
-/*---- multiple buffers ----*/
-typedef struct
-{
-    uint32_t number_of_buffers;
-    uint32_t buffer_size;
-    void    *buffers;
-} lsmash_multiple_buffers_t;
-
-lsmash_multiple_buffers_t *lsmash_create_multiple_buffers( uint32_t number_of_buffers, uint32_t buffer_size );
-void *lsmash_withdraw_buffer( lsmash_multiple_buffers_t *multiple_buffer, uint32_t buffer_number );
-lsmash_multiple_buffers_t *lsmash_resize_multiple_buffers( lsmash_multiple_buffers_t *multiple_buffer, uint32_t buffer_size );
-void lsmash_destroy_multiple_buffers( lsmash_multiple_buffers_t *multiple_buffer );
-
-/*---- memory writers ----*/
-#define LSMASH_SET_BYTE( p, x )          \
-    do                                   \
-    {                                    \
-        ((uint8_t *)(p))[0] = (x);       \
-    } while( 0 )
-#define LSMASH_SET_BE16( p, x )          \
-    do                                   \
-    {                                    \
-        ((uint8_t *)(p))[0] = (x) >> 8;  \
-        ((uint8_t *)(p))[1] = (x);       \
-    } while( 0 )
-#define LSMASH_SET_BE24( p, x )          \
-    do                                   \
-    {                                    \
-        ((uint8_t *)(p))[0] = (x) >> 16; \
-        ((uint8_t *)(p))[1] = (x) >>  8; \
-        ((uint8_t *)(p))[2] = (x);       \
-    } while( 0 )
-#define LSMASH_SET_BE32( p, x )          \
-    do                                   \
-    {                                    \
-        ((uint8_t *)(p))[0] = (x) >> 24; \
-        ((uint8_t *)(p))[1] = (x) >> 16; \
-        ((uint8_t *)(p))[2] = (x) >>  8; \
-        ((uint8_t *)(p))[3] = (x);       \
-    } while( 0 )
-#define LSMASH_SET_BE64( p, x )          \
-    do                                   \
-    {                                    \
-        ((uint8_t *)(p))[0] = (x) >> 56; \
-        ((uint8_t *)(p))[1] = (x) >> 48; \
-        ((uint8_t *)(p))[2] = (x) >> 40; \
-        ((uint8_t *)(p))[3] = (x) >> 32; \
-        ((uint8_t *)(p))[4] = (x) >> 24; \
-        ((uint8_t *)(p))[5] = (x) >> 16; \
-        ((uint8_t *)(p))[6] = (x) >>  8; \
-        ((uint8_t *)(p))[7] = (x);       \
-    } while( 0 )
-#define LSMASH_SET_LE16( p, x )          \
-    do                                   \
-    {                                    \
-        ((uint8_t *)(p))[0] = (x);       \
-        ((uint8_t *)(p))[1] = (x) >> 8;  \
-    } while( 0 )
-#define LSMASH_SET_LE32( p, x )          \
-    do                                   \
-    {                                    \
-        ((uint8_t *)(p))[0] = (x);       \
-        ((uint8_t *)(p))[1] = (x) >>  8; \
-        ((uint8_t *)(p))[2] = (x) >> 16; \
-        ((uint8_t *)(p))[3] = (x) >> 24; \
-    } while( 0 )
-
-/*---- memory readers ----*/
-#define LSMASH_GET_BYTE( p )                      \
-    (((const uint8_t *)(p))[0])
-#define LSMASH_GET_BE16( p )                      \
-     (((uint16_t)((const uint8_t *)(p))[0] << 8)  \
-    | ((uint16_t)((const uint8_t *)(p))[1]))
-#define LSMASH_GET_BE24( p )                      \
-     (((uint32_t)((const uint8_t *)(p))[0] << 16) \
-    | ((uint32_t)((const uint8_t *)(p))[1] <<  8) \
-    | ((uint32_t)((const uint8_t *)(p))[2]))
-#define LSMASH_GET_BE32( p )                      \
-     (((uint32_t)((const uint8_t *)(p))[0] << 24) \
-    | ((uint32_t)((const uint8_t *)(p))[1] << 16) \
-    | ((uint32_t)((const uint8_t *)(p))[2] <<  8) \
-    | ((uint32_t)((const uint8_t *)(p))[3]))
-#define LSMASH_GET_BE64( p )                      \
-     (((uint64_t)((const uint8_t *)(p))[0] << 56) \
-    | ((uint64_t)((const uint8_t *)(p))[1] << 48) \
-    | ((uint64_t)((const uint8_t *)(p))[2] << 40) \
-    | ((uint64_t)((const uint8_t *)(p))[3] << 32) \
-    | ((uint64_t)((const uint8_t *)(p))[4] << 24) \
-    | ((uint64_t)((const uint8_t *)(p))[5] << 16) \
-    | ((uint64_t)((const uint8_t *)(p))[6] <<  8) \
-    | ((uint64_t)((const uint8_t *)(p))[7]))
-#define LSMASH_GET_LE16( p )                      \
-     (((uint16_t)((const uint8_t *)(p))[0])       \
-    | ((uint16_t)((const uint8_t *)(p))[1] << 8))
-#define LSMASH_GET_LE32( p )                      \
-     (((uint32_t)((const uint8_t *)(p))[0])       \
-    | ((uint32_t)((const uint8_t *)(p))[1] <<  8) \
-    | ((uint32_t)((const uint8_t *)(p))[2] << 16) \
-    | ((uint32_t)((const uint8_t *)(p))[3] << 24))

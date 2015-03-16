@@ -1,7 +1,7 @@
 /*****************************************************************************
- * bstream.c
+ * bytes.c
  *****************************************************************************
- * Copyright (C) 2010-2014 L-SMASH project
+ * Copyright (C) 2010-2015 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -623,6 +623,18 @@ uint64_t lsmash_bs_get_be32_to_64( lsmash_bs_t *bs )
     return lsmash_bs_get_be32( bs );
 }
 
+uint16_t lsmash_bs_get_le16( lsmash_bs_t *bs )
+{
+    uint16_t value = lsmash_bs_get_byte( bs );
+    return value | (lsmash_bs_get_byte( bs ) << 8);
+}
+
+uint32_t lsmash_bs_get_le32( lsmash_bs_t *bs )
+{
+    uint32_t value = lsmash_bs_get_le16( bs );
+    return value | (lsmash_bs_get_le16( bs ) << 16);
+}
+
 int lsmash_bs_read( lsmash_bs_t *bs, uint32_t size )
 {
     if( !bs || size > INT_MAX )
@@ -696,179 +708,6 @@ int lsmash_bs_import_data( lsmash_bs_t *bs, void *data, uint32_t length )
 }
 /*---- ----*/
 
-/*---- bitstream ----*/
-void lsmash_bits_init( lsmash_bits_t *bits, lsmash_bs_t *bs )
-{
-    debug_if( !bits || !bs )
-        return;
-    bits->bs    = bs;
-    bits->store = 0;
-    bits->cache = 0;
-}
-
-lsmash_bits_t *lsmash_bits_create( lsmash_bs_t *bs )
-{
-    debug_if( !bs )
-        return NULL;
-    lsmash_bits_t *bits = (lsmash_bits_t *)lsmash_malloc( sizeof(lsmash_bits_t) );
-    if( !bits )
-        return NULL;
-    lsmash_bits_init( bits, bs );
-    return bits;
-}
-
-void lsmash_bits_empty( lsmash_bits_t *bits )
-{
-    debug_if( !bits )
-        return;
-    lsmash_bs_empty( bits->bs );
-    bits->store = 0;
-    bits->cache = 0;
-}
-
-#define BITS_IN_BYTE 8
-void lsmash_bits_put_align( lsmash_bits_t *bits )
-{
-    debug_if( !bits )
-        return;
-    if( !bits->store )
-        return;
-    lsmash_bs_put_byte( bits->bs, bits->cache << ( BITS_IN_BYTE - bits->store ) );
-}
-
-void lsmash_bits_get_align( lsmash_bits_t *bits )
-{
-    debug_if( !bits )
-        return;
-    bits->store = 0;
-    bits->cache = 0;
-}
-
-/* Must be used ONLY for bits struct created with isom_create_bits.
-   Otherwise, just lsmash_free() the bits struct. */
-void lsmash_bits_cleanup( lsmash_bits_t *bits )
-{
-    debug_if( !bits )
-        return;
-    lsmash_free( bits );
-}
-
-/* we can change value's type to unsigned int for 64-bit operation if needed. */
-static inline uint8_t lsmash_bits_mask_lsb8( uint32_t value, uint32_t width )
-{
-    return (uint8_t)( value & ~( ~0U << width ) );
-}
-
-void lsmash_bits_put( lsmash_bits_t *bits, uint32_t width, uint64_t value )
-{
-    debug_if( !bits || !width )
-        return;
-    if( bits->store )
-    {
-        if( bits->store + width < BITS_IN_BYTE )
-        {
-            /* cache can contain all of value's bits. */
-            bits->cache <<= width;
-            bits->cache |= lsmash_bits_mask_lsb8( value, width );
-            bits->store += width;
-            return;
-        }
-        /* flush cache with value's some leading bits. */
-        uint32_t free_bits = BITS_IN_BYTE - bits->store;
-        bits->cache <<= free_bits;
-        bits->cache |= lsmash_bits_mask_lsb8( value >> (width -= free_bits), free_bits );
-        lsmash_bs_put_byte( bits->bs, bits->cache );
-        bits->store = 0;
-        bits->cache = 0;
-    }
-    /* cache is empty here. */
-    /* byte unit operation. */
-    while( width > BITS_IN_BYTE )
-        lsmash_bs_put_byte( bits->bs, (uint8_t)(value >> (width -= BITS_IN_BYTE)) );
-    /* bit unit operation for residual. */
-    if( width )
-    {
-        bits->cache = lsmash_bits_mask_lsb8( value, width );
-        bits->store = width;
-    }
-}
-
-uint64_t lsmash_bits_get( lsmash_bits_t *bits, uint32_t width )
-{
-    debug_if( !bits || !width )
-        return 0;
-    uint64_t value = 0;
-    if( bits->store )
-    {
-        if( bits->store >= width )
-        {
-            /* cache contains all of bits required. */
-            bits->store -= width;
-            return lsmash_bits_mask_lsb8( bits->cache >> bits->store, width );
-        }
-        /* fill value's leading bits with cache's residual. */
-        value = lsmash_bits_mask_lsb8( bits->cache, bits->store );
-        width -= bits->store;
-        bits->store = 0;
-        bits->cache = 0;
-    }
-    /* cache is empty here. */
-    /* byte unit operation. */
-    while( width > BITS_IN_BYTE )
-    {
-        value <<= BITS_IN_BYTE;
-        width -= BITS_IN_BYTE;
-        value |= lsmash_bs_get_byte( bits->bs );
-    }
-    /* bit unit operation for residual. */
-    if( width )
-    {
-        bits->cache = lsmash_bs_get_byte( bits->bs );
-        bits->store = BITS_IN_BYTE - width;
-        value <<= width;
-        value |= lsmash_bits_mask_lsb8( bits->cache >> bits->store, width );
-    }
-    return value;
-}
-
-/****
- bitstream with bytestream for adhoc operation
-****/
-
-lsmash_bits_t* lsmash_bits_adhoc_create()
-{
-    lsmash_bs_t* bs = lsmash_bs_create();
-    if( !bs )
-        return NULL;
-    lsmash_bits_t* bits = lsmash_bits_create( bs );
-    if( !bits )
-    {
-        lsmash_bs_cleanup( bs );
-        return NULL;
-    }
-    return bits;
-}
-
-void lsmash_bits_adhoc_cleanup( lsmash_bits_t* bits )
-{
-    if( !bits )
-        return;
-    lsmash_bs_cleanup( bits->bs );
-    lsmash_bits_cleanup( bits );
-}
-
-void* lsmash_bits_export_data( lsmash_bits_t* bits, uint32_t* length )
-{
-    lsmash_bits_put_align( bits );
-    return lsmash_bs_export_data( bits->bs, length );
-}
-
-int lsmash_bits_import_data( lsmash_bits_t* bits, void* data, uint32_t length )
-{
-    return lsmash_bs_import_data( bits->bs, data, length );
-}
-/*---- ----*/
-
 /*---- basic I/O ----*/
 int lsmash_fread_wrapper( void *opaque, uint8_t *buf, int size )
 {
@@ -886,69 +725,4 @@ int64_t lsmash_fseek_wrapper( void *opaque, int64_t offset, int whence )
     if( lsmash_fseek( (FILE *)opaque, offset, whence ) != 0 )
         return LSMASH_ERR_NAMELESS;
     return lsmash_ftell( (FILE *)opaque );
-}
-
-lsmash_multiple_buffers_t *lsmash_create_multiple_buffers( uint32_t number_of_buffers, uint32_t buffer_size )
-{
-    if( (uint64_t)number_of_buffers * buffer_size > UINT32_MAX )
-        return NULL;
-    lsmash_multiple_buffers_t *multiple_buffer = lsmash_malloc( sizeof(lsmash_multiple_buffers_t) );
-    if( !multiple_buffer )
-        return NULL;
-    multiple_buffer->buffers = lsmash_malloc( number_of_buffers * buffer_size );
-    if( !multiple_buffer->buffers )
-    {
-        lsmash_free( multiple_buffer );
-        return NULL;
-    }
-    multiple_buffer->number_of_buffers = number_of_buffers;
-    multiple_buffer->buffer_size = buffer_size;
-    return multiple_buffer;
-}
-
-void *lsmash_withdraw_buffer( lsmash_multiple_buffers_t *multiple_buffer, uint32_t buffer_number )
-{
-    if( !multiple_buffer || !buffer_number || buffer_number > multiple_buffer->number_of_buffers )
-        return NULL;
-    return (uint8_t *)multiple_buffer->buffers + (buffer_number - 1) * multiple_buffer->buffer_size;
-}
-
-lsmash_multiple_buffers_t *lsmash_resize_multiple_buffers( lsmash_multiple_buffers_t *multiple_buffer, uint32_t buffer_size )
-{
-    if( !multiple_buffer )
-        return NULL;
-    if( buffer_size == multiple_buffer->buffer_size )
-        return multiple_buffer;
-    if( (uint64_t)multiple_buffer->number_of_buffers * buffer_size > UINT32_MAX )
-        return NULL;
-    uint8_t *temp;
-    if( buffer_size > multiple_buffer->buffer_size )
-    {
-        temp = lsmash_realloc( multiple_buffer->buffers, multiple_buffer->number_of_buffers * buffer_size );
-        if( !temp )
-            return NULL;
-        for( uint32_t i = multiple_buffer->number_of_buffers - 1; i ; i-- )
-            memmove( temp + buffer_size, temp + i * multiple_buffer->buffer_size, multiple_buffer->buffer_size );
-    }
-    else
-    {
-        for( uint32_t i = 1; i < multiple_buffer->number_of_buffers; i++ )
-            memmove( (uint8_t *)multiple_buffer->buffers + buffer_size,
-                     (uint8_t *)multiple_buffer->buffers + i * multiple_buffer->buffer_size,
-                                multiple_buffer->buffer_size );
-        temp = lsmash_realloc( multiple_buffer->buffers, multiple_buffer->number_of_buffers * buffer_size );
-        if( !temp )
-            return NULL;
-    }
-    multiple_buffer->buffers     = temp;
-    multiple_buffer->buffer_size = buffer_size;
-    return multiple_buffer;
-}
-
-void lsmash_destroy_multiple_buffers( lsmash_multiple_buffers_t *multiple_buffer )
-{
-    if( !multiple_buffer )
-        return;
-    lsmash_free( multiple_buffer->buffers );
-    lsmash_free( multiple_buffer );
 }

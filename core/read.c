@@ -1,7 +1,7 @@
 /*****************************************************************************
  * read.c:
  *****************************************************************************
- * Copyright (C) 2010-2014 L-SMASH project
+ * Copyright (C) 2010-2015 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -941,6 +941,8 @@ fail:
 
 static void *isom_sample_description_alloc( lsmash_codec_type_t sample_type )
 {
+    if( lsmash_check_codec_type_identical( sample_type, LSMASH_CODEC_TYPE_RAW ) )
+        return lsmash_malloc_zero( LSMASH_MAX( sizeof(isom_visual_entry_t), sizeof(isom_audio_entry_t) ) );
     static struct description_alloc_table_tag
     {
         lsmash_codec_type_t type;
@@ -991,6 +993,7 @@ static void *isom_sample_description_alloc( lsmash_codec_type_t sample_type )
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_APCS_VIDEO, sizeof(isom_visual_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_APCO_VIDEO, sizeof(isom_visual_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_AP4H_VIDEO, sizeof(isom_visual_entry_t) );
+        ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_AP4X_VIDEO, sizeof(isom_visual_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_CIVD_VIDEO, sizeof(isom_visual_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_DRAC_VIDEO, sizeof(isom_visual_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_DVC_VIDEO,  sizeof(isom_visual_entry_t) );
@@ -1022,6 +1025,7 @@ static void *isom_sample_description_alloc( lsmash_codec_type_t sample_type )
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_ULY0_VIDEO, sizeof(isom_visual_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_ULH2_VIDEO, sizeof(isom_visual_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_ULH0_VIDEO, sizeof(isom_visual_entry_t) );
+        ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_UQY2_VIDEO, sizeof(isom_visual_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_V210_VIDEO, sizeof(isom_visual_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_V216_VIDEO, sizeof(isom_visual_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_V308_VIDEO, sizeof(isom_visual_entry_t) );
@@ -1050,6 +1054,7 @@ static void *isom_sample_description_alloc( lsmash_codec_type_t sample_type )
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT( ISOM_CODEC_TYPE_SQCP_AUDIO, sizeof(isom_audio_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT( ISOM_CODEC_TYPE_SSMV_AUDIO, sizeof(isom_audio_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT( ISOM_CODEC_TYPE_TWOS_AUDIO, sizeof(isom_audio_entry_t) );
+        ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT( ISOM_CODEC_TYPE_WMA_AUDIO,  sizeof(isom_audio_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_MP4A_AUDIO, sizeof(isom_audio_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_23NI_AUDIO, sizeof(isom_audio_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_MAC3_AUDIO, sizeof(isom_audio_entry_t) );
@@ -1071,7 +1076,6 @@ static void *isom_sample_description_alloc( lsmash_codec_type_t sample_type )
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_IN24_AUDIO, sizeof(isom_audio_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_IN32_AUDIO, sizeof(isom_audio_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_LPCM_AUDIO, sizeof(isom_audio_entry_t) );
-        ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_RAW_AUDIO,  sizeof(isom_audio_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_SOWT_AUDIO, sizeof(isom_audio_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_TWOS_AUDIO, sizeof(isom_audio_entry_t) );
         ADD_DESCRIPTION_ALLOC_TABLE_ELEMENT(   QT_CODEC_TYPE_ULAW_AUDIO, sizeof(isom_audio_entry_t) );
@@ -1144,7 +1148,7 @@ static int isom_read_visual_description( lsmash_file_t *file, isom_box_t *box, i
      && lsmash_bs_get_pos( bs ) < box->size
      && (ret = isom_read_qt_color_table( bs, &visual->color_table )) < 0 )
         return ret;
-    box->parent = parent;
+    box->parent   = parent;
     box->manager |= LSMASH_VIDEO_DESCRIPTION;
     isom_box_common_copy( visual, box );
     if( (ret = isom_add_print_func( file, visual, level )) < 0 )
@@ -1324,7 +1328,20 @@ static int isom_read_audio_description( lsmash_file_t *file, isom_box_t *box, is
     audio->compression_ID       = lsmash_bs_get_be16( bs );
     audio->packet_size          = lsmash_bs_get_be16( bs );
     audio->samplerate           = lsmash_bs_get_be32( bs );
-    if( audio->version == 1 )
+    if( audio->version == 0 && isom_is_qt_audio( box->type ) )
+    {
+        /* Skip weird extra bytes.
+         * About QTFF, extensions were first added with Sound Sample Description v1. */
+        while( lsmash_bs_count( bs ) + ISOM_BASEBOX_COMMON_SIZE <= box->size )
+        {
+            uint32_t size = lsmash_bs_show_be32( bs, 0 );
+            if( size == 0 || lsmash_bs_count( bs ) + size > box->size )
+                lsmash_bs_skip_bytes( bs, 1 );
+            else
+                break;
+        }
+    }
+    else if( audio->version == 1 )
     {
         if( ((isom_stsd_t *)parent)->version == 0 )
         {
@@ -1418,6 +1435,8 @@ static int isom_read_chan( lsmash_file_t *file, isom_box_t *box, isom_box_t *par
                 desc->coordinates[j] = lsmash_bs_get_be32( bs );
         }
     }
+    /* A 'chan' box often contains extra 20 bytes (= the number of bytes of one channel description). */
+    isom_skip_box_rest( bs, box );
     return isom_read_leaf_box_common_last_process( file, box, level, chan );
 }
 
@@ -2405,10 +2424,20 @@ static int isom_read_mfro( lsmash_file_t *file, isom_box_t *box, isom_box_t *par
     return isom_read_leaf_box_common_last_process( file, box, level, mfro );
 }
 
-static inline void isom_read_skip_extra_bytes( lsmash_bs_t *bs, uint64_t size )
+static void isom_read_skip_extra_bytes( lsmash_bs_t *bs, uint64_t size )
 {
     if( !bs->unseekable )
+    {
+        /* lsmash_bs_read_seek() could fail on offset=INT64_MAX, so use (INT64_MAX >> 1) instead. */
+        while( size > (INT64_MAX >> 1) )
+        {
+            lsmash_bs_read_seek( bs, INT64_MAX >> 1, SEEK_CUR );
+            if( lsmash_bs_is_end( bs, 0 ) )
+                return;
+            size -= (INT64_MAX >> 1);
+        }
         lsmash_bs_read_seek( bs, size, SEEK_CUR );
+    }
     else
         lsmash_bs_skip_bytes_64( bs, size );
 }
@@ -2556,6 +2585,7 @@ int isom_read_box( lsmash_file_t *file, isom_box_t *box, isom_box_t *parent, uin
             ADD_DESCRIPTION_READER_TABLE_ELEMENT( QT_CODEC_TYPE_APCS_VIDEO, lsmash_form_qtff_box_type, isom_read_visual_description );
             ADD_DESCRIPTION_READER_TABLE_ELEMENT( QT_CODEC_TYPE_APCO_VIDEO, lsmash_form_qtff_box_type, isom_read_visual_description );
             ADD_DESCRIPTION_READER_TABLE_ELEMENT( QT_CODEC_TYPE_AP4H_VIDEO, lsmash_form_qtff_box_type, isom_read_visual_description );
+            ADD_DESCRIPTION_READER_TABLE_ELEMENT( QT_CODEC_TYPE_AP4X_VIDEO, lsmash_form_qtff_box_type, isom_read_visual_description );
             ADD_DESCRIPTION_READER_TABLE_ELEMENT( QT_CODEC_TYPE_CIVD_VIDEO, lsmash_form_qtff_box_type, isom_read_visual_description );
             //ADD_DESCRIPTION_READER_TABLE_ELEMENT( QT_CODEC_TYPE_DRAC_VIDEO, lsmash_form_qtff_box_type, isom_read_visual_description );
             ADD_DESCRIPTION_READER_TABLE_ELEMENT( QT_CODEC_TYPE_DVC_VIDEO, lsmash_form_qtff_box_type, isom_read_visual_description );
@@ -2587,6 +2617,7 @@ int isom_read_box( lsmash_file_t *file, isom_box_t *box, isom_box_t *parent, uin
             ADD_DESCRIPTION_READER_TABLE_ELEMENT( QT_CODEC_TYPE_ULY0_VIDEO, lsmash_form_qtff_box_type, isom_read_visual_description );
             ADD_DESCRIPTION_READER_TABLE_ELEMENT( QT_CODEC_TYPE_ULH2_VIDEO, lsmash_form_qtff_box_type, isom_read_visual_description );
             ADD_DESCRIPTION_READER_TABLE_ELEMENT( QT_CODEC_TYPE_ULH0_VIDEO, lsmash_form_qtff_box_type, isom_read_visual_description );
+            ADD_DESCRIPTION_READER_TABLE_ELEMENT( QT_CODEC_TYPE_UQY2_VIDEO, lsmash_form_qtff_box_type, isom_read_visual_description );
             ADD_DESCRIPTION_READER_TABLE_ELEMENT( QT_CODEC_TYPE_V210_VIDEO, lsmash_form_qtff_box_type, isom_read_visual_description );
             ADD_DESCRIPTION_READER_TABLE_ELEMENT( QT_CODEC_TYPE_V216_VIDEO, lsmash_form_qtff_box_type, isom_read_visual_description );
             ADD_DESCRIPTION_READER_TABLE_ELEMENT( QT_CODEC_TYPE_V308_VIDEO, lsmash_form_qtff_box_type, isom_read_visual_description );
@@ -2614,6 +2645,7 @@ int isom_read_box( lsmash_file_t *file, isom_box_t *box, isom_box_t *parent, uin
             ADD_DESCRIPTION_READER_TABLE_ELEMENT( ISOM_CODEC_TYPE_SQCP_AUDIO, lsmash_form_iso_box_type, isom_read_audio_description );
             ADD_DESCRIPTION_READER_TABLE_ELEMENT( ISOM_CODEC_TYPE_SSMV_AUDIO, lsmash_form_iso_box_type, isom_read_audio_description );
             //ADD_DESCRIPTION_READER_TABLE_ELEMENT( ISOM_CODEC_TYPE_TWOS_AUDIO, lsmash_form_iso_box_type, isom_read_audio_description );
+            ADD_DESCRIPTION_READER_TABLE_ELEMENT( ISOM_CODEC_TYPE_WMA_AUDIO,  lsmash_form_iso_box_type, isom_read_audio_description );
             ADD_DESCRIPTION_READER_TABLE_ELEMENT( QT_CODEC_TYPE_23NI_AUDIO, lsmash_form_qtff_box_type, isom_read_audio_description );
             ADD_DESCRIPTION_READER_TABLE_ELEMENT( QT_CODEC_TYPE_MAC3_AUDIO, lsmash_form_qtff_box_type, isom_read_audio_description );
             ADD_DESCRIPTION_READER_TABLE_ELEMENT( QT_CODEC_TYPE_MAC6_AUDIO, lsmash_form_qtff_box_type, isom_read_audio_description );
@@ -2862,6 +2894,7 @@ int isom_read_box( lsmash_file_t *file, isom_box_t *box, isom_box_t *parent, uin
             ADD_CODEC_SPECIFIC_MARKER_TABLE_ELEMENT( ISOM_BOX_TYPE_DEC3, lsmash_form_iso_box_type );
             ADD_CODEC_SPECIFIC_MARKER_TABLE_ELEMENT( ISOM_BOX_TYPE_DVC1, lsmash_form_iso_box_type );
             ADD_CODEC_SPECIFIC_MARKER_TABLE_ELEMENT( ISOM_BOX_TYPE_HVCC, lsmash_form_iso_box_type );
+            ADD_CODEC_SPECIFIC_MARKER_TABLE_ELEMENT( ISOM_BOX_TYPE_WFEX, lsmash_form_iso_box_type );
             ADD_CODEC_SPECIFIC_MARKER_TABLE_ELEMENT(   QT_BOX_TYPE_GLBL, lsmash_form_qtff_box_type );
             ADD_CODEC_SPECIFIC_MARKER_TABLE_ELEMENT( LSMASH_BOX_TYPE_UNSPECIFIED, NULL );
 #undef ADD_CODEC_SPECIFIC_MARKER_TABLE_ELEMENT

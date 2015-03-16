@@ -1,7 +1,7 @@
 /*****************************************************************************
  * internal.h:
  *****************************************************************************
- * Copyright (C) 2010-2014 L-SMASH project
+ * Copyright (C) 2010-2015 L-SMASH project
  *
  * Authors:  Takashi Hirata <silverfilain@gmail.com>
  *
@@ -27,15 +27,13 @@
 #include <stdio.h>
 #include <assert.h>
 
-#ifndef lsmash_fseek
-#define lsmash_fseek fseeko
-#define lsmash_ftell ftello
-#endif
-
 #include "lsmash.h"
 
 #include "utils.h"
-#include "bstream.h"
+#include "memint.h"
+#include "bytes.h"
+#include "bits.h"
+#include "multibuf.h"
 #include "list.h"
 
 #endif

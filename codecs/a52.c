@@ -1,7 +1,7 @@
 /*****************************************************************************
  * a52.c:
  *****************************************************************************
- * Copyright (C) 2012-2014 L-SMASH project
+ * Copyright (C) 2012-2015 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -70,6 +70,9 @@ static const char *audio_coding_mode[] =
 #include "a52.h"
 
 #define AC3_SPECIFIC_BOX_LENGTH 11
+
+const uint32_t ac3_sample_rate_table  [4] = { 48000, 44100, 32000, 0 };
+const uint32_t ac3_channel_count_table[8] = { 2, 1, 2, 3, 3, 4, 4, 5 };
 
 uint32_t ac3_get_sample_rate( lsmash_ac3_specific_parameters_t *dac3_param )
 {
@@ -243,6 +246,8 @@ int ac3_print_codec_specific( FILE *fp, lsmash_file_t *file, isom_box_t *box, in
     Enhanced AC-3 tools
     ETSI TS 102 366 V1.2.1 (2008-08)
 ***************************************************************************/
+
+const uint8_t eac3_audio_block_table[4] = { 1, 2, 3, 6 };
 
 uint8_t *lsmash_create_eac3_specific_info( lsmash_eac3_specific_parameters_t *param, uint32_t *data_length )
 {

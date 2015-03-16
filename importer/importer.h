@@ -1,7 +1,7 @@
 /*****************************************************************************
  * importer.h:
  *****************************************************************************
- * Copyright (C) 2010-2014 L-SMASH project
+ * Copyright (C) 2010-2015 L-SMASH project
  *
  * Authors: Takashi Hirata <silverfilain@gmail.com>
  * Contributors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
@@ -27,18 +27,18 @@
 /***************************************************************************
     importer
 ***************************************************************************/
+typedef struct importer_tag importer_t;
 
 #ifdef LSMASH_IMPORTER_INTERNAL
 
 #include "core/box.h"
 #include "codecs/description.h"
 
-struct importer_tag;
-
-typedef void     ( *importer_cleanup )          ( struct importer_tag * );
-typedef int      ( *importer_get_accessunit )   ( struct importer_tag *, uint32_t, lsmash_sample_t * );
-typedef int      ( *importer_probe )            ( struct importer_tag * );
-typedef uint32_t ( *importer_get_last_duration )( struct importer_tag *, uint32_t );
+typedef void     ( *importer_cleanup )           ( importer_t * );
+typedef int      ( *importer_get_accessunit )    ( importer_t *, uint32_t, lsmash_sample_t ** );
+typedef int      ( *importer_probe )             ( importer_t * );
+typedef uint32_t ( *importer_get_last_duration ) ( importer_t *, uint32_t );
+typedef int      ( *importer_construct_timeline )( importer_t *, uint32_t );
 
 typedef enum
 {
@@ -50,31 +50,70 @@ typedef enum
 
 typedef struct
 {
-    lsmash_class_t             class;
-    int                        detectable;
-    importer_probe             probe;
-    importer_get_accessunit    get_accessunit;
-    importer_get_last_duration get_last_delta;
-    importer_cleanup           cleanup;
+    lsmash_class_t              class;
+    int                         detectable;
+    importer_probe              probe;
+    importer_get_accessunit     get_accessunit;
+    importer_get_last_duration  get_last_delta;
+    importer_cleanup            cleanup;
+    importer_construct_timeline construct_timeline;
 } importer_functions;
 
-typedef struct importer_tag
+struct importer_tag
 {
     const lsmash_class_t   *class;
     lsmash_log_level        log_level;
     importer_status         status;
+    lsmash_root_t          *root;
+    lsmash_file_t          *file;
     lsmash_bs_t            *bs;
+    lsmash_file_parameters_t file_param;
     int                     is_stdin;
     void                   *info;      /* importer internal status information. */
     importer_functions      funcs;
     lsmash_entry_list_t    *summaries;
-} importer_t;
+};
+
+int lsmash_importer_make_fake_movie
+(
+    importer_t *importer
+);
+
+int lsmash_importer_make_fake_track
+(
+    importer_t       *importer,
+    lsmash_media_type media_type,
+    uint32_t         *track_ID
+);
+
+void lsmash_importer_break_fake_movie
+(
+    importer_t *importer
+);
 
 #else
 
-typedef void importer_t;
+int lsmash_importer_set_file
+(
+    importer_t    *importer,
+    lsmash_file_t *file
+);
 
 /* importing functions */
+importer_t *lsmash_importer_alloc( void );
+
+void lsmash_importer_destroy
+(
+    importer_t *importer
+);
+
+int lsmash_importer_find
+(
+    importer_t *importer,
+    const char *format,
+    int         auto_detect
+);
+
 importer_t *lsmash_importer_open
 (
     const char *identifier,
@@ -88,12 +127,18 @@ void lsmash_importer_close
 
 int lsmash_importer_get_access_unit
 (
-    importer_t      *importer,
-    uint32_t         track_number,
-    lsmash_sample_t *buffered_sample
+    importer_t       *importer,
+    uint32_t          track_number,
+    lsmash_sample_t **p_sample
 );
 
 uint32_t lsmash_importer_get_last_delta
+(
+    importer_t *importer,
+    uint32_t    track_number
+);
+
+int lsmash_importer_construct_timeline
 (
     importer_t *importer,
     uint32_t    track_number

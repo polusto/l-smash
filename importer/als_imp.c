@@ -1,7 +1,7 @@
 /*****************************************************************************
  * als_imp.c
  *****************************************************************************
- * Copyright (C) 2011-2014 L-SMASH project
+ * Copyright (C) 2011-2015 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -209,7 +209,7 @@ static int als_parse_specific_config( lsmash_bs_t *bs, mp4a_als_importer_t *als_
     return 0;
 }
 
-static int mp4a_als_importer_get_accessunit( importer_t *importer, uint32_t track_number, lsmash_sample_t *buffered_sample )
+static int mp4a_als_importer_get_accessunit( importer_t *importer, uint32_t track_number, lsmash_sample_t **p_sample )
 {
     if( !importer->info )
         return LSMASH_ERR_NAMELESS;
@@ -221,19 +221,20 @@ static int mp4a_als_importer_get_accessunit( importer_t *importer, uint32_t trac
     mp4a_als_importer_t *als_imp = (mp4a_als_importer_t *)importer->info;
     importer_status current_status = importer->status;
     if( current_status == IMPORTER_EOF )
-    {
-        buffered_sample->length = 0;
-        return 0;
-    }
+        return IMPORTER_EOF;
     lsmash_bs_t *bs = importer->bs;
     als_specific_config_t *alssc = &als_imp->alssc;
     if( alssc->number_of_ra_units == 0 )
     {
-        memcpy( buffered_sample->data, lsmash_bs_get_buffer_data( bs ), alssc->access_unit_size );
-        buffered_sample->length        = alssc->access_unit_size;
-        buffered_sample->cts           = 0;
-        buffered_sample->dts           = 0;
-        buffered_sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_SYNC;
+        lsmash_sample_t *sample = lsmash_create_sample( alssc->access_unit_size );
+        if( !sample )
+            return LSMASH_ERR_MEMORY_ALLOC;
+        *p_sample = sample;
+        memcpy( sample->data, lsmash_bs_get_buffer_data( bs ), alssc->access_unit_size );
+        sample->length        = alssc->access_unit_size;
+        sample->cts           = 0;
+        sample->dts           = 0;
+        sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_SYNC;
         importer->status = IMPORTER_EOF;
         return 0;
     }
@@ -243,21 +244,20 @@ static int mp4a_als_importer_get_accessunit( importer_t *importer, uint32_t trac
     else /* if( alssc->ra_flag == 1 ) */
         /* We don't export ra_unit_size into a sample. */
         au_length = lsmash_bs_get_be32( bs );
-    if( buffered_sample->length < au_length )
-    {
-        lsmash_log( importer, LSMASH_LOG_WARNING, "the buffer has not enough size.\n" );
-        return LSMASH_ERR_NAMELESS;
-    }
-    if( lsmash_bs_get_bytes_ex( bs, au_length, buffered_sample->data ) != au_length )
+    lsmash_sample_t *sample = lsmash_create_sample( au_length );
+    if( !sample )
+        return LSMASH_ERR_MEMORY_ALLOC;
+    *p_sample = sample;
+    if( lsmash_bs_get_bytes_ex( bs, au_length, sample->data ) != au_length )
     {
         lsmash_log( importer, LSMASH_LOG_WARNING, "failed to read an access unit.\n" );
         importer->status = IMPORTER_ERROR;
         return LSMASH_ERR_INVALID_DATA;
     }
-    buffered_sample->length        = au_length;
-    buffered_sample->dts           = als_imp->au_number ++ * als_imp->samples_in_frame;
-    buffered_sample->cts           = buffered_sample->dts;
-    buffered_sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_SYNC;
+    sample->length        = au_length;
+    sample->dts           = als_imp->au_number ++ * als_imp->samples_in_frame;
+    sample->cts           = sample->dts;
+    sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_SYNC;
     if( als_imp->au_number == alssc->number_of_ra_units )
         importer->status = IMPORTER_EOF;
     return 0;
@@ -288,7 +288,7 @@ static lsmash_audio_summary_t *als_create_summary( lsmash_bs_t *bs, als_specific
         while( !bs->eof )
         {
             if( lsmash_bs_read( bs, bs->buffer.max_size ) < 0 )
-                return NULL;
+                goto fail;
             alssc->access_unit_size = lsmash_bs_get_remaining_buffer_size( bs );
         }
         summary->max_au_length    = alssc->access_unit_size;
@@ -299,36 +299,33 @@ static lsmash_audio_summary_t *als_create_summary( lsmash_bs_t *bs, als_specific
                                                      summary->frequency, summary->channels, summary->sbr_mode,
                                                      alssc->sc_data, alssc->size, &data_length );
     if( !data )
-    {
-        lsmash_cleanup_summary( (lsmash_summary_t *)summary );
-        return NULL;
-    }
+        goto fail;
     lsmash_codec_specific_t *specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_MP4SYS_DECODER_CONFIG,
                                                                            LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
     if( !specific )
     {
-        lsmash_cleanup_summary( (lsmash_summary_t *)summary );
         lsmash_free( data );
-        return NULL;
+        goto fail;
     }
     lsmash_mp4sys_decoder_parameters_t *param = (lsmash_mp4sys_decoder_parameters_t *)specific->data.structured;
     param->objectTypeIndication = MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3;
     param->streamType           = MP4SYS_STREAM_TYPE_AudioStream;
     if( lsmash_set_mp4sys_decoder_specific_info( param, data, data_length ) < 0 )
     {
-        lsmash_cleanup_summary( (lsmash_summary_t *)summary );
         lsmash_destroy_codec_specific_data( specific );
         lsmash_free( data );
-        return NULL;
+        goto fail;
     }
     lsmash_free( data );
     if( lsmash_add_entry( &summary->opaque->list, specific ) < 0 )
     {
-        lsmash_cleanup_summary( (lsmash_summary_t *)summary );
         lsmash_destroy_codec_specific_data( specific );
-        return NULL;
+        goto fail;
     }
     return summary;
+fail:
+    lsmash_cleanup_summary( (lsmash_summary_t *)summary );
+    return NULL;
 }
 
 static int mp4a_als_importer_probe( importer_t *importer )

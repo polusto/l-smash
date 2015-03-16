@@ -1,7 +1,7 @@
 /*****************************************************************************
  * muxer.c:
  *****************************************************************************
- * Copyright (C) 2010-2014 L-SMASH project
+ * Copyright (C) 2010-2015 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *          Takashi Hirata <silverfilain@gmail.com>
@@ -21,18 +21,15 @@
 
 /* This file is available under an ISC license. */
 
+#include "cli.h"
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
-#include <strings.h>
 #include <stdlib.h>
 #include <inttypes.h>
 
-#include "lsmash.h"
-#include "importer.h"
-#include "cli.h"
-
-#include "config.h"
+#include "importer/importer.h"
 
 #define MAX_NUM_OF_BRANDS 50
 #define MAX_NUM_OF_INPUTS 10
@@ -103,6 +100,7 @@ typedef struct
     lsmash_summary_t    *summary;
     input_track_option_t opt;
     int                  active;
+    int                  lpcm;
 } input_track_t;
 
 typedef struct
@@ -138,6 +136,7 @@ typedef struct
     uint64_t          prev_dts;
     int64_t           start_offset;
     double            dts;
+    int               lpcm;
 } output_track_t;
 
 typedef struct
@@ -301,7 +300,7 @@ static int muxer_usage_error( void )
 
 static int add_brand( option_t *opt, uint32_t brand )
 {
-    if( opt->num_of_brands > MAX_NUM_OF_BRANDS )
+    if( opt->num_of_brands >= MAX_NUM_OF_BRANDS )
         return -1;
     /* Avoid duplication. */
     for( uint32_t i = 0; i < opt->num_of_brands; i++ )
@@ -361,6 +360,7 @@ static int decide_brands( option_t *opt )
             case ISOM_BRAND_TYPE_M4A :
             case ISOM_BRAND_TYPE_M4V :
                 opt->itunes_movie = 1;
+                /* fall-through */
             case ISOM_BRAND_TYPE_MP42 :
                 add_brand( opt, ISOM_BRAND_TYPE_MP42 );
                 add_brand( opt, ISOM_BRAND_TYPE_MP41 );
@@ -666,7 +666,7 @@ static int parse_track_options( input_t *input )
                     }
                     ++track_parameter;
                 }
-                track_opt->copyright_language = track_parameter ? lsmash_pack_iso_language( track_parameter ) : ISOM_LANGUAGE_CODE_UNDEFINED;
+                track_opt->copyright_language = lsmash_pack_iso_language( track_parameter );
             }
             else if( strstr( track_option, "handler=" ) )
             {
@@ -701,6 +701,7 @@ static void display_codec_name( lsmash_codec_type_t codec_type, uint32_t track_n
     DISPLAY_CODEC_NAME( ISOM_CODEC_TYPE_DTSL_AUDIO, DTS-HD Lossless );
     DISPLAY_CODEC_NAME( ISOM_CODEC_TYPE_SAWB_AUDIO, Wideband AMR voice );
     DISPLAY_CODEC_NAME( ISOM_CODEC_TYPE_SAMR_AUDIO, Narrowband AMR voice );
+    DISPLAY_CODEC_NAME(   QT_CODEC_TYPE_LPCM_AUDIO, Uncompressed Audio );
 #undef DISPLAY_CODEC_NAME
 }
 
@@ -730,6 +731,12 @@ static int open_input_files( muxer_t *muxer )
              input->current_track_number ++ )
         {
             input_track_t *in_track = &input->track[input->current_track_number - 1];
+            int err = lsmash_importer_construct_timeline( input->importer, input->current_track_number );
+            if( err < 0 && err != LSMASH_ERR_PATCH_WELCOME )
+            {
+                in_track->active = 0;
+                continue;
+            }
             in_track->summary = lsmash_duplicate_summary( input->importer, input->current_track_number );
             if( !in_track->summary )
                 return ERROR_MSG( "failed to get input summary.\n" );
@@ -774,6 +781,12 @@ static int open_input_files( muxer_t *muxer )
             {
                 if( !opt->brand_3gx )
                     return ERROR_MSG( "the input seems AMR-NB/WB, available for 3GPP(2) file format.\n" );
+            }
+            else if( lsmash_check_codec_type_identical( codec_type, QT_CODEC_TYPE_LPCM_AUDIO ) )
+            {
+                if( opt->isom && !opt->qtff )
+                    return ERROR_MSG( "the input seems Uncompressed Audio, at present available only for QuickTime file format.\n" );
+                in_track->lpcm = 1;
             }
             else
             {
@@ -892,8 +905,8 @@ static int prepare_output( muxer_t *muxer )
                     if( !out_track->track_ID )
                         return ERROR_MSG( "failed to create a track.\n" );
                     lsmash_video_summary_t *summary = (lsmash_video_summary_t *)in_track->summary;
-                    uint64_t display_width  = summary->width  << 16;
-                    uint64_t display_height = summary->height << 16;
+                    uint64_t display_width  = (uint64_t)summary->width  << 16;
+                    uint64_t display_height = (uint64_t)summary->height << 16;
                     if( summary->par_h && summary->par_v )
                     {
                         double sar = (double)summary->par_h / summary->par_v;
@@ -902,8 +915,8 @@ static int prepare_output( muxer_t *muxer )
                         else
                             display_height /= sar;
                     }
-                    track_param.display_width  = display_width;
-                    track_param.display_height = display_height;
+                    track_param.display_width  = display_width  <= UINT32_MAX ? display_width  : UINT32_MAX;
+                    track_param.display_height = display_height <= UINT32_MAX ? display_height : UINT32_MAX;
                     /* Initialize media */
                     uint32_t timescale = 25;    /* default value */
                     uint32_t timebase  = 1;     /* default value */
@@ -973,10 +986,11 @@ static int prepare_output( muxer_t *muxer )
                     }
                     media_param.timescale          = summary->frequency;
                     media_param.media_handler_name = track_opt->handler_name ? track_opt->handler_name : "L-SMASH Audio Handler";
-                    media_param.roll_grouping      = (opt->isom_version >= 2 || opt->qtff);
+                    media_param.roll_grouping      = (opt->isom_version >= 2 || (opt->qtff && !in_track->lpcm));
                     out_track->priming_samples = track_opt->encoder_delay;
                     out_track->timescale       = summary->frequency;
                     out_track->timebase        = 1;
+                    out_track->lpcm            = in_track->lpcm;
                     break;
                 }
                 default :
@@ -1044,20 +1058,18 @@ static int do_mux( muxer_t *muxer )
             /* Get a new sample data if the track doesn't hold any one. */
             if( !sample )
             {
-                /* Allocate sample buffer. */
-                sample = lsmash_create_sample( out_track->summary->max_au_length );
-                if( !sample )
-                    return ERROR_MSG( "failed to alloc memory for buffer.\n" );
                 /* lsmash_importer_get_access_unit() returns 1 if there're any changes in stream's properties. */
-                int ret = lsmash_importer_get_access_unit( input->importer, input->current_track_number, sample );
-                if( ret == -1 )
+                int ret = lsmash_importer_get_access_unit( input->importer, input->current_track_number, &sample );
+                if( ret == LSMASH_ERR_MEMORY_ALLOC )
+                    return ERROR_MSG( "failed to alloc memory for buffer.\n" );
+                else if( ret <= -1 )
                 {
                     lsmash_delete_sample( sample );
                     ERROR_MSG( "failed to get a frame from input file. Maybe corrupted.\n"
                                "Aborting muxing operation and trying to let output be valid file.\n" );
                     break;
                 }
-                else if( ret == 1 )
+                else if( ret == 1 ) /* a change of stream's properties */
                 {
                     input_track_t *in_track = &input->track[input->current_track_number - 1];
                     lsmash_cleanup_summary( in_track->summary );
@@ -1070,7 +1082,7 @@ static int do_mux( muxer_t *muxer )
                         break;
                     }
                 }
-                if( sample->length == 0 )
+                else if( ret == 2 ) /* EOF */
                 {
                     /* No more appendable samples in this track. */
                     lsmash_delete_sample( sample );
@@ -1083,7 +1095,7 @@ static int do_mux( muxer_t *muxer )
                     if( --num_active_input_tracks == 0 )
                         break;      /* Reached the end of whole tracks. */
                 }
-                else
+                if( sample )
                 {
                     sample->index = out_track->sample_entry;
                     sample->dts  *= out_track->timebase;
@@ -1146,12 +1158,15 @@ static int do_mux( muxer_t *muxer )
     {
         /* Close track. */
         output_track_t *out_track = &out_movie->track[ out_movie->current_track_number - 1 ];
-        if( lsmash_flush_pooled_samples( output->root, out_track->track_ID, out_track->last_delta ) )
+        uint32_t last_sample_delta = out_track->lpcm ? 1 : out_track->last_delta;
+        if( lsmash_flush_pooled_samples( output->root, out_track->track_ID, last_sample_delta ) )
             ERROR_MSG( "failed to flush the rest of samples.\n" );
         /* Create edit list.
-         * Don't trust media duration. It's just duration of media, not duration of track presentation.
-         * Calculation of presentation duration by DTS is reliable since this muxer handles CFR only. */
-        uint64_t actual_duration  = out_track->prev_dts + out_track->last_delta - out_track->priming_samples;
+         * Don't trust media duration basically. It's just duration of media, not duration of track presentation. */
+        uint64_t actual_duration = out_track->lpcm
+                                 ? lsmash_get_media_duration( output->root, out_track->track_ID )
+                                 : out_track->prev_dts + last_sample_delta;
+        actual_duration -= out_track->priming_samples;
         lsmash_edit_t edit;
         edit.duration   = actual_duration * ((double)lsmash_get_movie_timescale( output->root ) / out_track->timescale);
         edit.start_time = out_track->priming_samples + out_track->start_offset;

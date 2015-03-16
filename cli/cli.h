@@ -1,7 +1,7 @@
 /*****************************************************************************
  * cli.h:
  *****************************************************************************
- * Copyright (C) 2013-2014 L-SMASH project
+ * Copyright (C) 2013-2015 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -22,6 +22,16 @@
 
 #ifndef CLI_H
 #define CLI_H
+
+#include "config.h"
+#include "common/osdep.h"
+#include "lsmash.h"
+
+#ifdef _MSC_VER
+#define strcasecmp _stricmp
+#else
+#include <strings.h>
+#endif
 
 #ifdef _WIN32
    void lsmash_get_mainargs( int *argc, char ***argv );

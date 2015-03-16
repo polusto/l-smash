@@ -1,7 +1,7 @@
 /*****************************************************************************
  * box.c:
  *****************************************************************************
- * Copyright (C) 2012-2014 L-SMASH project
+ * Copyright (C) 2012-2015 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -28,18 +28,20 @@
 #include "box.h"
 #include "write.h"
 #include "read.h"
-#ifdef LSMASH_DEMUXER_ENABLED
 #include "print.h"
 #include "timeline.h"
-#endif
 
 #include "codecs/mp4a.h"
 #include "codecs/mp4sys.h"
+
+#include "importer/importer.h"
 
 static const lsmash_class_t lsmash_box_class =
 {
     "box"
 };
+
+const lsmash_box_type_t static_lsmash_box_type_unspecified = LSMASH_BOX_TYPE_INITIALIZER;
 
 void isom_init_box_common_orig
 (
@@ -452,7 +454,7 @@ lsmash_entry_t *isom_get_entry_of_box
         REMOVER( box_name, parent_type );                                      \
     } while( 0 )
 
-#define REMOVE_LIST_BOX( ... ) CALL_FUNC_DEFAULT_ARGS( REMOVE_LIST_BOX, __VA_ARGS__ )
+#define REMOVE_LIST_BOX( box_name, ... ) CALL_FUNC_DEFAULT_ARGS( REMOVE_LIST_BOX, box_name, __VA_ARGS__ )
 #define REMOVE_LIST_BOX_3( box_name, parent_type, eliminator ) \
         REMOVE_LIST_BOX_TEMPLATE( REMOVE_BOX, box_name, parent_type, eliminator )
 #define REMOVE_LIST_BOX_2( box_name, parent_type ) \
@@ -469,17 +471,17 @@ lsmash_entry_t *isom_get_entry_of_box
         REMOVER( box_name, __VA_ARGS__ );                               \
     }
 
-#define DEFINE_SIMPLE_BOX_REMOVER( func_name, ... )   \
-        DEFINE_SIMPLE_BOX_REMOVER_TEMPLATE( REMOVE_BOX, __VA_ARGS__ )
+#define DEFINE_SIMPLE_BOX_REMOVER( func_name, box_name, ... )   \
+        DEFINE_SIMPLE_BOX_REMOVER_TEMPLATE( REMOVE_BOX, box_name, __VA_ARGS__ )
 
-#define DEFINE_SIMPLE_LIST_BOX_REMOVER( func_name, ... ) \
-        DEFINE_SIMPLE_BOX_REMOVER_TEMPLATE( REMOVE_LIST_BOX, __VA_ARGS__ )
+#define DEFINE_SIMPLE_LIST_BOX_REMOVER( func_name, box_name, ... ) \
+        DEFINE_SIMPLE_BOX_REMOVER_TEMPLATE( REMOVE_LIST_BOX, box_name, __VA_ARGS__ )
 
-#define DEFINE_SIMPLE_BOX_IN_LIST_REMOVER( func_name, ... ) \
-        DEFINE_SIMPLE_BOX_REMOVER_TEMPLATE( REMOVE_BOX_IN_LIST, __VA_ARGS__ )
+#define DEFINE_SIMPLE_BOX_IN_LIST_REMOVER( func_name, box_name, ... ) \
+        DEFINE_SIMPLE_BOX_REMOVER_TEMPLATE( REMOVE_BOX_IN_LIST, box_name, __VA_ARGS__ )
 
-#define DEFINE_SIMPLE_LIST_BOX_IN_LIST_REMOVER( func_name, ... ) \
-        DEFINE_SIMPLE_BOX_REMOVER_TEMPLATE( REMOVE_LIST_BOX_IN_LIST, __VA_ARGS__ )
+#define DEFINE_SIMPLE_LIST_BOX_IN_LIST_REMOVER( func_name, box_name, ... ) \
+        DEFINE_SIMPLE_BOX_REMOVER_TEMPLATE( REMOVE_LIST_BOX_IN_LIST, box_name, __VA_ARGS__ )
 
 static void isom_remove_predefined_box( void *opaque_box, size_t offset_of_box )
 {
@@ -551,12 +553,11 @@ static void isom_remove_file( lsmash_file_t *file )
 {
     if( !file )
         return;
-#ifdef LSMASH_DEMUXER_ENABLED
     isom_remove_print_funcs( file );
     isom_remove_timelines( file );
-#endif
     lsmash_free( file->compatible_brands );
     lsmash_bs_cleanup( file->bs );
+    lsmash_importer_destroy( file->importer );
     if( file->fragment )
     {
         lsmash_remove_list( file->fragment->pool, isom_remove_sample_pool );
@@ -788,6 +789,7 @@ void isom_remove_sample_description( isom_sample_entry_t *sample )
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_APCS_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_APCO_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_AP4H_VIDEO, isom_remove_visual_description );
+        ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_AP4X_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_CIVD_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_DRAC_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_DVC_VIDEO,  isom_remove_visual_description );
@@ -819,6 +821,7 @@ void isom_remove_sample_description( isom_sample_entry_t *sample )
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_ULY0_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_ULH2_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_ULH0_VIDEO, isom_remove_visual_description );
+        ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_UQY2_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_V210_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_V216_VIDEO, isom_remove_visual_description );
         ADD_DESCRIPTION_REMOVER_TABLE_ELEMENT( QT_CODEC_TYPE_V308_VIDEO, isom_remove_visual_description );
@@ -1759,6 +1762,15 @@ lsmash_extended_box_type_t lsmash_form_extended_box_type( uint32_t fourcc, const
 {
     return (lsmash_extended_box_type_t){ fourcc, { id[0], id[1], id[2], id[3], id[4],  id[5],
                                                    id[6], id[7], id[8], id[9], id[10], id[11] } };
+}
+
+lsmash_box_type_t lsmash_form_box_type
+(
+    lsmash_compact_box_type_t  type,
+    lsmash_extended_box_type_t user
+)
+{
+    return (lsmash_box_type_t){ type, user };
 }
 
 lsmash_box_type_t lsmash_form_iso_box_type( uint32_t fourcc )

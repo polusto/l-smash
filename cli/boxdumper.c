@@ -1,7 +1,7 @@
 /*****************************************************************************
  * boxdumper.c:
  *****************************************************************************
- * Copyright (C) 2010-2014 L-SMASH project
+ * Copyright (C) 2010-2015 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -20,20 +20,16 @@
 
 /* This file is available under an ISC license. */
 
+#include "cli.h"
+
 #include <stdio.h>
 #include <string.h>
-#include <strings.h>
 #include <stdlib.h>
 #include <inttypes.h>
 #ifdef _WIN32
 #include <io.h>
 #include <fcntl.h>
 #endif
-
-#include "lsmash.h"
-#include "cli.h"
-
-#include "config.h"
 
 #define eprintf( ... ) fprintf( stderr, __VA_ARGS__ )
 
@@ -115,9 +111,6 @@ int main( int argc, char *argv[] )
     {
         filename = argv[1];
     }
-#ifdef _WIN32
-    _setmode( _fileno(stdin), _O_BINARY );
-#endif
     /* Open the input file. */
     lsmash_root_t *root = lsmash_create_root();
     if( !root )
