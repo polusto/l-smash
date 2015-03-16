@@ -2225,6 +2225,12 @@ fail:
     return err;
 }
 
+int isom_setup_rtp_hint_description(isom_stsd_t *stsd, lsmash_summary_t *summary)
+{
+
+}
+
+
 static lsmash_codec_specific_data_type isom_get_codec_specific_data_type( lsmash_compact_box_type_t extension_fourcc )
 {
     static struct codec_specific_data_type_table_tag

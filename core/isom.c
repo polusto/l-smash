@@ -270,8 +270,8 @@ typedef void (*opaque_func_t)( void );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_MP4A_AUDIO,    isom_setup_audio_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_MAC3_AUDIO,    isom_setup_audio_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_MAC6_AUDIO,    isom_setup_audio_description );
-		ADD_DESCRIPTION_SETUP_TABLE_ELEMENT(QT_CODEC_TYPE_AGSM_AUDIO, isom_setup_audio_description);
-		ADD_DESCRIPTION_SETUP_TABLE_ELEMENT(QT_CODEC_TYPE_GSM_AUDIO, isom_setup_audio_description);
+		ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_AGSM_AUDIO, isom_setup_audio_description);
+		ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_GSM_AUDIO, isom_setup_audio_description);
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_ALAW_AUDIO,    isom_setup_audio_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_ULAW_AUDIO,    isom_setup_audio_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_FULLMP3_AUDIO, isom_setup_audio_description );
@@ -287,7 +287,8 @@ typedef void (*opaque_func_t)( void );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_IN24_AUDIO,    isom_setup_audio_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_IN32_AUDIO,    isom_setup_audio_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_23NI_AUDIO,    isom_setup_audio_description );
-        ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_NOT_SPECIFIED, isom_setup_audio_description );
+		ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_NOT_SPECIFIED, isom_setup_audio_description);
+		ADD_DESCRIPTION_SETUP_TABLE_ELEMENT(ISOM_CODEC_TYPE_RRTP_HINT, isom_setup_rtp_hint_description);
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( ISOM_CODEC_TYPE_TX3G_TEXT, isom_add_tx3g_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_TEXT_TEXT,   isom_add_qt_text_description );
 #if 0
@@ -303,15 +304,17 @@ typedef void (*opaque_func_t)( void );
                 ret = isom_setup_audio_description( stsd, sample_type, (lsmash_audio_summary_t *)summary );
             else if( (opaque_func_t)isom_add_tx3g_description == description_setup_table[i].func )
                 ret = isom_setup_tx3g_description( stsd, (lsmash_summary_t *)summary );
-            else if( (opaque_func_t)isom_add_qt_text_description == description_setup_table[i].func )
-            {
-                isom_qt_text_entry_t *text = isom_add_qt_text_description( stsd );
-                if( text )
-                {
-                    text->data_reference_index = ((lsmash_summary_t *)summary)->data_ref_index;
-                    ret = 0;
-                }
-            }
+			else if ((opaque_func_t)isom_add_qt_text_description == description_setup_table[i].func)
+			{
+				isom_qt_text_entry_t *text = isom_add_qt_text_description(stsd);
+				if (text)
+				{
+					text->data_reference_index = ((lsmash_summary_t *)summary)->data_ref_index;
+					ret = 0;
+				}
+			}
+			else if ((opaque_func_t)isom_setup_rtp_hint_description == description_setup_table[i].func)
+				ret = isom_setup_rtp_hint_description(stsd, (lsmash_summary_t *)summary);
             break;
         }
     return ret < 0 ? 0 : list->entry_count;

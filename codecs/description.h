@@ -64,6 +64,12 @@ int isom_setup_tx3g_description
     lsmash_summary_t *summary
 );
 
+int isom_setup_rtp_hint_description
+(
+	isom_stsd_t      *stsd,
+	lsmash_summary_t *summary
+);
+
 lsmash_summary_t *isom_create_video_summary_from_description
 (
     isom_sample_entry_t *sample_entry
