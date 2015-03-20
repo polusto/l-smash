@@ -861,6 +861,7 @@ DEFINE_ISOM_CODEC_TYPE( ISOM_CODEC_TYPE_PM2T_HINT,   LSMASH_4CC( 'p', 'm', '2', 
 DEFINE_ISOM_CODEC_TYPE( ISOM_CODEC_TYPE_PRTP_HINT,   LSMASH_4CC( 'p', 'r', 't', 'p' ) );    /* Protected RTP Reception */
 DEFINE_ISOM_CODEC_TYPE( ISOM_CODEC_TYPE_RM2T_HINT,   LSMASH_4CC( 'r', 'm', '2', 't' ) );    /* MPEG-2 Transport Reception */
 DEFINE_ISOM_CODEC_TYPE( ISOM_CODEC_TYPE_RRTP_HINT,   LSMASH_4CC( 'r', 'r', 't', 'p' ) );    /* RTP reception */
+DEFINE_ISOM_CODEC_TYPE( ISOM_CODEC_TYPE_RTCP_HINT,   LSMASH_4CC( 'r', 't', 'c', 'p' ) );    /* RTCP reception */
 DEFINE_ISOM_CODEC_TYPE( ISOM_CODEC_TYPE_RSRP_HINT,   LSMASH_4CC( 'r', 's', 'r', 'p' ) );    /* SRTP Reception */
 DEFINE_ISOM_CODEC_TYPE( ISOM_CODEC_TYPE_RTP_HINT,    LSMASH_4CC( 'r', 't', 'p', ' ' ) );    /* RTP Hints */
 DEFINE_ISOM_CODEC_TYPE( ISOM_CODEC_TYPE_SM2T_HINT,   LSMASH_4CC( 's', 'm', '2', 't' ) );    /* MPEG-2 Transport Server */
@@ -901,7 +902,8 @@ typedef enum
 {
     LSMASH_SUMMARY_TYPE_UNKNOWN = 0,
     LSMASH_SUMMARY_TYPE_VIDEO,
-    LSMASH_SUMMARY_TYPE_AUDIO,
+	LSMASH_SUMMARY_TYPE_AUDIO,
+	LSMASH_SUMMARY_TYPE_RTP_HINT,
 } lsmash_summary_type;
 
 typedef enum
@@ -922,6 +924,7 @@ typedef enum
 
     LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_VIDEO_SAMPLE_SCALE,
     LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_VIDEO_H264_BITRATE,
+	LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTP_HINT_COMMON,
 
     LSMASH_CODEC_SPECIFIC_DATA_TYPE_QT_VIDEO_COMMON,                    /* must be LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED */
     LSMASH_CODEC_SPECIFIC_DATA_TYPE_QT_AUDIO_COMMON,                    /* must be LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED */
@@ -1411,6 +1414,19 @@ int lsmash_convert_clap_into_crop
     uint32_t       height,
     lsmash_crop_t *crop
 );
+
+/****************************************************************************
+* Hint Description Layer
+****************************************************************************/
+
+typedef struct
+{
+	LSMASH_BASE_SUMMARY
+	uint16_t version;
+	uint16_t highestcompatibleversion;
+	uint32_t maxpacketsize;
+	uint32_t timescale;/* Ignore if rtcp. */
+} lsmash_rtp_hint_summary_t;
 
 /****************************************************************************
  * Media Sample
@@ -4079,6 +4095,36 @@ int lsmash_create_object_descriptor
 (
     lsmash_root_t *root
 );
+
+int lsmash_set_rtcp_reference_track
+(
+lsmash_root_t *root,
+uint32_t       rtcp_track_ID,
+uint32_t       rrtp_track_ID
+);
+
+int lsmash_unset_rtcp_reference_track
+(
+lsmash_root_t *root,
+uint32_t       rtcp_track_ID,
+uint32_t       rrtp_track_ID
+);
+
+/* Timestamp synchronization */
+typedef enum
+{
+	ISOM_SYNC_ANY = 0,
+	ISOM_SYNC_RECIEVED_RTP = 1,
+	ISOM_SYNC_OTHER_TRACKS = 2,
+	ISOM_SYNC_RESERVED = 3,
+} timestamp_sync_t;
+
+typedef struct
+{
+	uint32_t time_offset;
+	timestamp_sync_t sync;
+} lsmash_isom_rtp_hint_common_t;
+
 
 #ifdef _WIN32
 /* Convert string encoded by ACP (ANSI CODE PAGE) to UTF-8.

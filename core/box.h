@@ -2582,7 +2582,8 @@ isom_dref_entry_t *isom_add_dref_entry( isom_dref_t *dref, lsmash_box_type_t typ
 isom_stbl_t *isom_add_stbl( isom_minf_t *minf );
 isom_stsd_t *isom_add_stsd( isom_stbl_t *stbl );
 isom_visual_entry_t *isom_add_visual_description( isom_stsd_t *stsd, lsmash_codec_type_t sample_type );
-isom_audio_entry_t *isom_add_audio_description( isom_stsd_t *stsd, lsmash_codec_type_t sample_type );
+isom_audio_entry_t *isom_add_audio_description(isom_stsd_t *stsd, lsmash_codec_type_t sample_type);
+isom_hint_entry_t *isom_add_hint_description(isom_stsd_t *stsd, lsmash_codec_type_t sample_type);
 isom_qt_text_entry_t *isom_add_qt_text_description( isom_stsd_t *stsd );
 isom_tx3g_entry_t *isom_add_tx3g_description( isom_stsd_t *stsd );
 isom_esds_t *isom_add_esds( void *parent_box );

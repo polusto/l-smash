@@ -292,6 +292,7 @@ typedef void (*opaque_func_t)( void );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_23NI_AUDIO,    isom_setup_audio_description );
 		ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_NOT_SPECIFIED, isom_setup_audio_description);
 		ADD_DESCRIPTION_SETUP_TABLE_ELEMENT(ISOM_CODEC_TYPE_RRTP_HINT, isom_setup_rtp_hint_description);
+		ADD_DESCRIPTION_SETUP_TABLE_ELEMENT(ISOM_CODEC_TYPE_RTCP_HINT, isom_setup_rtp_hint_description);
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( ISOM_CODEC_TYPE_TX3G_TEXT, isom_add_tx3g_description );
         ADD_DESCRIPTION_SETUP_TABLE_ELEMENT( QT_CODEC_TYPE_TEXT_TEXT,   isom_add_qt_text_description );
 #if 0
@@ -317,7 +318,7 @@ typedef void (*opaque_func_t)( void );
 				}
 			}
 			else if ((opaque_func_t)isom_setup_rtp_hint_description == description_setup_table[i].func)
-				ret = isom_setup_rtp_hint_description(stsd, (lsmash_summary_t *)summary);
+				ret = isom_setup_rtp_hint_description(stsd, sample_type, (lsmash_rtp_hint_summary_t *)summary);
             break;
         }
     return ret < 0 ? 0 : list->entry_count;

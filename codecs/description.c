@@ -868,7 +868,10 @@ static int isom_check_valid_summary( lsmash_summary_t *summary )
         required_data_type = LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_AUDIO_DTS;
     else if( lsmash_check_codec_type_identical( sample_type, ISOM_CODEC_TYPE_ALAC_AUDIO )
           || lsmash_check_codec_type_identical( sample_type,   QT_CODEC_TYPE_ALAC_AUDIO ) )
-        required_data_type = LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_AUDIO_ALAC;
+		  required_data_type = LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_AUDIO_ALAC;
+	else if (lsmash_check_codec_type_identical(sample_type, ISOM_CODEC_TYPE_RRTP_HINT)
+	|| lsmash_check_codec_type_identical(sample_type, ISOM_CODEC_TYPE_RTCP_HINT))
+		required_data_type = LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTP_HINT_COMMON;
     if( required_data_type == LSMASH_CODEC_SPECIFIC_DATA_TYPE_UNSPECIFIED )
         return 0;
     return isom_get_codec_specific( summary->opaque, required_data_type ) ? 0 : LSMASH_ERR_INVALID_DATA;
@@ -2233,9 +2236,21 @@ fail:
     return err;
 }
 
-int isom_setup_rtp_hint_description(isom_stsd_t *stsd, lsmash_summary_t *summary)
+int isom_setup_rtp_hint_description(isom_stsd_t *stsd, lsmash_codec_type_t sample_type, lsmash_rtp_hint_summary_t *summary)
 {
+	// Set up sample description for a hint track
+	if (!stsd || !stsd->file || !summary)
+		return LSMASH_ERR_NAMELESS;
+	int err = isom_check_valid_summary((lsmash_summary_t *)summary);
+	isom_hint_entry_t *hint = isom_add_hint_description(stsd, sample_type);
+    if( !hint )
+        return LSMASH_ERR_NAMELESS;
 
+	// configure the sample description
+
+	// TODO data;
+
+	return 0;
 }
 
 
