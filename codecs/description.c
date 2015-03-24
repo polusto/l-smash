@@ -418,6 +418,9 @@ static int isom_duplicate_structured_specific_data( lsmash_codec_specific_t *dst
         case LSMASH_CODEC_SPECIFIC_DATA_TYPE_QT_AUDIO_CHANNEL_LAYOUT :
             *(lsmash_qt_audio_channel_layout_t *)dst_data = *(lsmash_qt_audio_channel_layout_t *)src_data;
             return 0;
+		case LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTP_HINT_COMMON:
+			*(lsmash_isom_rtp_hint_common_t *)dst_data = *(lsmash_isom_rtp_hint_common_t *)src_data;
+			return 0;
         default :
             return LSMASH_ERR_NAMELESS;
     }
