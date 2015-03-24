@@ -695,7 +695,7 @@ static void isom_remove_audio_description( isom_sample_entry_t *description )
 static void isom_remove_hint_description( isom_sample_entry_t *description )
 {
     isom_hint_entry_t *hint = (isom_hint_entry_t *)description;
-    lsmash_free( hint->data );
+	lsmash_free(hint->additionaldata);
     isom_remove_box_in_predefined_list( hint, offsetof( isom_stsd_t, list ) );
 }
 

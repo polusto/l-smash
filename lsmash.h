@@ -4119,10 +4119,18 @@ typedef enum
 	ISOM_SYNC_RESERVED = 3,
 } timestamp_sync_t;
 
+int set_reception_timestamp_synchrony(timestamp_sync_t sync);
+
+int set_reception_hint_offset(int32_t offset);
+
+
+
 typedef struct
 {
+	uint32_t timescale;
 	uint32_t time_offset;
-	timestamp_sync_t sync;
+	/*timestamp_sync_t sync;*/
+	uint8_t reserved_timestamp_sync;
 } lsmash_isom_rtp_hint_common_t;
 
 

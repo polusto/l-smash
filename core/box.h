@@ -776,12 +776,15 @@ typedef struct
 /* Hint Sample Entry */
 #define ISOM_HINT_SAMPLE_ENTRY \
     ISOM_SAMPLE_ENTRY; \
-    uint8_t *data
+    uint16_t hinttrackversion; \
+	uint16_t highestcompatibleversion; \
+	uint32_t maxpacketsize; \
+	uint8_t *additionaldata
 
 typedef struct
 {
     ISOM_HINT_SAMPLE_ENTRY;
-    uint32_t data_length;
+    uint32_t additionaldata_length;
 } isom_hint_entry_t;
 
 /* Metadata Sample Entry */

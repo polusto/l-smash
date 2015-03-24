@@ -272,6 +272,10 @@ static int isom_initialize_structured_codec_specific_data( lsmash_codec_specific
             specific->size     = sizeof(lsmash_qt_audio_channel_layout_t);
             specific->destruct = lsmash_free;
             break;
+		case LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTP_HINT_COMMON:
+			specific->size = sizeof(lsmash_isom_rtp_hint_common_t);
+			specific->destruct = lsmash_free;
+			break;
         default :
             specific->size     = 0;
             specific->destruct = isom_destruct_nothing;
@@ -1584,6 +1588,28 @@ static int isom_set_isom_dts_description( isom_audio_entry_t *audio, lsmash_audi
     return 0;
 }
 
+static int isom_set_rtp_reception_description(isom_hint_entry_t *hint, lsmash_rtp_hint_summary_t *summary)
+{
+	hint->hinttrackversion = summary->version;
+	hint->highestcompatibleversion = summary->highestcompatibleversion;
+	hint->maxpacketsize = summary->maxpacketsize;
+
+	hint->additionaldata_length = 0;
+
+	return 0;
+}
+
+static int isom_set_rtp_additional_reception_description(isom_hint_entry_t *hint, lsmash_rtp_hint_summary_t *summary)
+{
+	lsmash_isom_rtp_hint_common_t *additionaldata = lsmash_malloc(sizeof(lsmash_isom_rtp_hint_common_t));
+
+	additionaldata->timescale = summary->timescale;
+
+	hint->additionaldata = additionaldata;
+	hint->additionaldata_length = sizeof(additionaldata);
+	return 0;
+}
+
 static lsmash_box_type_t isom_guess_audio_codec_specific_box_type( lsmash_codec_type_t active_codec_type, lsmash_compact_box_type_t fourcc )
 {
     lsmash_box_type_t box_type = LSMASH_BOX_TYPE_INITIALIZER;
@@ -2247,10 +2273,25 @@ int isom_setup_rtp_hint_description(isom_stsd_t *stsd, lsmash_codec_type_t sampl
         return LSMASH_ERR_NAMELESS;
 
 	// configure the sample description
+	lsmash_codec_type_t hint_type = hint->type;
 
-	// TODO data;
+	if (lsmash_check_codec_type_identical(hint_type, ISOM_CODEC_TYPE_RRTP_HINT))
+	{
+		/*lsmash_isom_rtp_hint_common_t *data = (lsmash_isom_rtp_hint_common_t *)specific->data;*/
+		err = isom_set_rtp_reception_description(hint, summary);
+
+		/*err = isom_set_rtp_additional_reception_description(hint, summary);*/
+	}
+	else if (lsmash_check_codec_type_identical(hint_type, ISOM_CODEC_TYPE_RTCP_HINT))
+		err = isom_set_rtp_reception_description(hint, summary);
+	else
+		err = isom_set_rtp_reception_description(hint, summary);
+	if (err < 0)
+		goto fail;
 
 	return 0;
+fail:
+	return err;
 }
 
 
