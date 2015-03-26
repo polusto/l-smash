@@ -1606,7 +1606,7 @@ static int isom_set_rtp_additional_reception_description(isom_hint_entry_t *hint
 {
 	lsmash_isom_rtp_hint_common_t *additionaldata = lsmash_malloc(sizeof(lsmash_isom_rtp_hint_common_t));
 
-	additionaldata->timescale = summary->timescale;
+	/*additionaldata->timescale = summary->timescale;*/
 
 	hint->additionaldata = additionaldata;
 	hint->additionaldata_length = sizeof(additionaldata);
@@ -2282,8 +2282,48 @@ int isom_setup_rtp_hint_description(isom_stsd_t *stsd, lsmash_codec_type_t sampl
 	{
 		/*lsmash_isom_rtp_hint_common_t *data = (lsmash_isom_rtp_hint_common_t *)specific->data;*/
 		err = isom_set_rtp_reception_description(hint, summary);
+		err = isom_set_rtp_additional_reception_description(hint, summary);
+		//for (lsmash_entry_t *entry = summary->opaque->list.head; entry; entry = entry->next)
+		//{
+		//	lsmash_codec_specific_t *specific = (lsmash_codec_specific_t *)entry->data;
+		//	lsmash_codec_specific_t *cs = lsmash_convert_codec_specific_format(specific, LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED);
+		//	if (!cs)
+		//		goto fail;
+		//	/*lsmash_h264_bitrate_t *data = (lsmash_h264_bitrate_t *)cs->data.structured;*/
+		//	isom_tims_t *tims = isom_add_tims(hint);
+		//	if (!tims)
+		//	{
+		//		lsmash_destroy_codec_specific_data(cs);
+		//		goto fail;
+		//	}
+		//	tims->timescale = summary->timescale;
+		//	//btrt->bufferSizeDB = data->bufferSizeDB;
+		//	//btrt->maxBitrate = data->maxBitrate;
+		//	//btrt->avgBitrate = data->avgBitrate;
 
-		/*err = isom_set_rtp_additional_reception_description(hint, summary);*/
+
+
+		//	isom_tsro_t *tsro = isom_add_tsro(hint);
+		//	if (!tsro)
+		//	{
+		//		lsmash_destroy_codec_specific_data(cs);
+		//		goto fail;
+		//	}
+		//	tsro->offset = 1;
+
+
+		//	isom_tssy_t *tssy = isom_add_tssy(hint);
+		//	if (!tssy)
+		//	{
+		//		lsmash_destroy_codec_specific_data(cs);
+		//		goto fail;
+		//	}
+		//	tssy->reserved_sync = 2;
+
+		//	lsmash_destroy_codec_specific_data(cs);
+		//	break;
+		//}
+		
 	}
 	else if (lsmash_check_codec_type_identical(hint_type, ISOM_CODEC_TYPE_RTCP_HINT))
 		err = isom_set_rtp_reception_description(hint, summary);

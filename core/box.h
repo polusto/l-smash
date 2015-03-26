@@ -457,6 +457,28 @@ typedef struct
     uint32_t avgBitrate;    /* the average rate in bits/second over the entire presentation */
 } isom_btrt_t;
 
+typedef struct
+{
+	/* This box is in Media Information Box or Meta Box */
+	ISOM_BASEBOX_COMMON;
+	uint32_t *timescale;  
+} isom_tims_t;
+
+typedef struct
+{
+	/* This box is in Media Information Box or Meta Box */
+	ISOM_BASEBOX_COMMON;
+	int32_t *offset;
+} isom_tsro_t;
+
+typedef struct
+{
+	/* This box is in Media Information Box or Meta Box */
+	ISOM_BASEBOX_COMMON;
+	uint8_t reserved_sync;
+} isom_tssy_t;
+
+
 /* Global Header Box */
 typedef struct
 {
@@ -779,6 +801,7 @@ typedef struct
     uint16_t hinttrackversion; \
 	uint16_t highestcompatibleversion; \
 	uint32_t maxpacketsize; \
+	uint32_t timescale; \
 	uint8_t *additionaldata
 
 typedef struct
@@ -2096,6 +2119,10 @@ struct lsmash_root_tag
 
 #define ISOM_BOX_TYPE_FTAB lsmash_form_iso_box_type( LSMASH_4CC( 'f', 't', 'a', 'b' ) )
 
+#define ISOM_BOX_TYPE_TIMS lsmash_form_iso_box_type( LSMASH_4CC( 't', 'i', 'm', 's' ) )
+#define ISOM_BOX_TYPE_TSRO lsmash_form_iso_box_type( LSMASH_4CC( 't', 's', 'r', 'o' ) )
+#define ISOM_BOX_TYPE_TSSY lsmash_form_iso_box_type( LSMASH_4CC( 't', 's', 's', 'y' ) )
+
 /* iTunes Metadata */
 #define ISOM_BOX_TYPE_DATA lsmash_form_iso_box_type( LSMASH_4CC( 'd', 'a', 't', 'a' ) )
 #define ISOM_BOX_TYPE_ILST lsmash_form_iso_box_type( LSMASH_4CC( 'i', 'l', 's', 't' ) )
@@ -2600,6 +2627,9 @@ isom_cspc_t *isom_add_cspc( isom_visual_entry_t *visual );
 isom_sgbt_t *isom_add_sgbt( isom_visual_entry_t *visual );
 isom_stsl_t *isom_add_stsl( isom_visual_entry_t *visual );
 isom_btrt_t *isom_add_btrt( isom_visual_entry_t *visual );
+isom_tims_t *isom_add_tims( isom_hint_entry_t *hint );
+isom_tsro_t *isom_add_tsro( isom_hint_entry_t *hint );
+isom_tssy_t *isom_add_tssy( isom_hint_entry_t *hint );
 isom_wave_t *isom_add_wave( isom_audio_entry_t *audio );
 isom_frma_t *isom_add_frma( isom_wave_t *wave );
 isom_enda_t *isom_add_enda( isom_wave_t *wave );

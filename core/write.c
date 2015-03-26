@@ -598,6 +598,34 @@ static int isom_write_audio_description( lsmash_bs_t *bs, isom_box_t *box )
     return 0;
 }
 
+static int isom_write_hint_description(lsmash_bs_t *bs, isom_box_t *box)
+{
+	isom_hint_entry_t *data = (isom_hint_entry_t *)box;
+	if (!data)
+		return LSMASH_ERR_NAMELESS;
+	isom_bs_put_box_common(bs, data);
+	lsmash_bs_put_bytes(bs, 6, data->reserved);
+	lsmash_bs_put_be16(bs, data->data_reference_index);
+
+	lsmash_bs_put_be16(bs, data->hinttrackversion);
+	lsmash_bs_put_be16(bs, data->highestcompatibleversion);
+	lsmash_bs_put_be32(bs, data->maxpacketsize);
+
+	if (data->timescale != 0)
+	{
+		isom_bs_put_box_common(bs, data->timescale);
+		lsmash_bs_put_be32(bs, data->timescale);
+	}
+	if (data->additionaldata_length != 0)
+	{
+
+		//isom_bs_put_box_common(bs, data);
+		//isom_bs_put_box_common(bs, data);
+	}
+
+	return 0;
+}
+
 #if 0
 static int isom_write_hint_description( lsmash_bs_t *bs, lsmash_entry_t *entry )
 {
@@ -1462,8 +1490,10 @@ void isom_set_box_writer( isom_box_t *box )
             isom_minf_t *minf = (isom_minf_t *)parent->parent->parent;
             if( minf->vmhd )
                 box->write = isom_write_visual_description;
-            else if( minf->smhd )
-                box->write = isom_write_audio_description;
+			else if (minf->smhd)
+				box->write = isom_write_audio_description;
+			else if (minf->hmhd)
+				box->write = isom_write_hint_description;
             if( box->write )
                 return;
         }
