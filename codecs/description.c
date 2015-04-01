@@ -2290,13 +2290,13 @@ int isom_setup_rtp_hint_description(isom_stsd_t *stsd, lsmash_codec_type_t sampl
 		//	if (!cs)
 		//		goto fail;
 		//	/*lsmash_h264_bitrate_t *data = (lsmash_h264_bitrate_t *)cs->data.structured;*/
-		//	isom_tims_t *tims = isom_add_tims(hint);
+		isom_tims_t *tims = isom_add_tims(hint);
 		//	if (!tims)
 		//	{
 		//		lsmash_destroy_codec_specific_data(cs);
 		//		goto fail;
 		//	}
-		//	tims->timescale = summary->timescale;
+		tims->timescale = summary->timescale;
 		//	//btrt->bufferSizeDB = data->bufferSizeDB;
 		//	//btrt->maxBitrate = data->maxBitrate;
 		//	//btrt->avgBitrate = data->avgBitrate;
