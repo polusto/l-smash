@@ -2280,23 +2280,36 @@ int isom_setup_rtp_hint_description(isom_stsd_t *stsd, lsmash_codec_type_t sampl
 
 	if (lsmash_check_codec_type_identical(hint_type, ISOM_CODEC_TYPE_RRTP_HINT))
 	{
-		/*lsmash_isom_rtp_hint_common_t *data = (lsmash_isom_rtp_hint_common_t *)specific->data;*/
+		
 		err = isom_set_rtp_reception_description(hint, summary);
 		err = isom_set_rtp_additional_reception_description(hint, summary);
-		//for (lsmash_entry_t *entry = summary->opaque->list.head; entry; entry = entry->next)
-		//{
-		//	lsmash_codec_specific_t *specific = (lsmash_codec_specific_t *)entry->data;
-		//	lsmash_codec_specific_t *cs = lsmash_convert_codec_specific_format(specific, LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED);
-		//	if (!cs)
-		//		goto fail;
-		//	/*lsmash_h264_bitrate_t *data = (lsmash_h264_bitrate_t *)cs->data.structured;*/
-		isom_tims_t *tims = isom_add_tims(hint);
-		//	if (!tims)
-		//	{
-		//		lsmash_destroy_codec_specific_data(cs);
-		//		goto fail;
-		//	}
-		tims->timescale = summary->timescale;
+
+		for (lsmash_entry_t *entry = summary->opaque->list.head; entry; entry = entry->next)
+		{
+			lsmash_codec_specific_t *specific = (lsmash_codec_specific_t *)entry->data;
+			/*lsmash_codec_specific_t *cs = lsmash_convert_codec_specific_format(specific, LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED);*/
+
+			if (specific->type == LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTP_HINT_COMMON)
+			{
+				lsmash_isom_rtp_hint_common_t* rtp_param;
+				rtp_param = (lsmash_isom_rtp_hint_common_t *)specific->data.structured;
+				isom_tims_t *tims = isom_add_tims(hint);
+				tims->timescale = rtp_param->timescale;
+
+				isom_tsro_t *tsro = isom_add_tsro(hint);
+				tsro->offset = rtp_param->time_offset;
+
+				isom_tssy_t *tssy = isom_add_tssy(hint);
+				tssy->reserved_sync = rtp_param->reserved_timestamp_sync;
+			}
+
+			if (!specific)
+			{
+				err = LSMASH_ERR_NAMELESS;
+				goto fail;
+			}
+		}
+
 		//	//btrt->bufferSizeDB = data->bufferSizeDB;
 		//	//btrt->maxBitrate = data->maxBitrate;
 		//	//btrt->avgBitrate = data->avgBitrate;

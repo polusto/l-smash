@@ -461,14 +461,14 @@ typedef struct
 {
 	/* This box is in Media Information Box or Meta Box */
 	ISOM_BASEBOX_COMMON;
-	uint32_t *timescale;  
+	uint32_t timescale;  
 } isom_tims_t;
 
 typedef struct
 {
 	/* This box is in Media Information Box or Meta Box */
 	ISOM_BASEBOX_COMMON;
-	int32_t *offset;
+	int32_t offset;
 } isom_tsro_t;
 
 typedef struct

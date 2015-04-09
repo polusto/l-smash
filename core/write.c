@@ -481,6 +481,7 @@ static int isom_write_tsro(lsmash_bs_t *bs, isom_box_t *box)
 {
 	isom_tsro_t *tsro = (isom_tsro_t *)box;
 	isom_bs_put_box_common(bs, tsro);
+	lsmash_bs_put_be32(bs, tsro->offset);
 
 	return 0;
 }
@@ -489,6 +490,7 @@ static int isom_write_tssy(lsmash_bs_t *bs, isom_box_t *box)
 {
 	isom_tssy_t *tssy = (isom_tssy_t *)box;
 	isom_bs_put_box_common(bs, tssy);
+	lsmash_bs_put_byte(bs, tssy->reserved_sync);
 
 	return 0;
 }

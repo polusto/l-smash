@@ -1425,7 +1425,6 @@ typedef struct
 	uint16_t version;
 	uint16_t highestcompatibleversion;
 	uint32_t maxpacketsize;
-	uint32_t timescale;/* Ignore if rtcp. */
 } lsmash_rtp_hint_summary_t;
 
 /****************************************************************************
@@ -4096,20 +4095,6 @@ int lsmash_create_object_descriptor
     lsmash_root_t *root
 );
 
-int lsmash_set_rtcp_reference_track
-(
-lsmash_root_t *root,
-uint32_t       rtcp_track_ID,
-uint32_t       rrtp_track_ID
-);
-
-int lsmash_unset_rtcp_reference_track
-(
-lsmash_root_t *root,
-uint32_t       rtcp_track_ID,
-uint32_t       rrtp_track_ID
-);
-
 /* Timestamp synchronization */
 typedef enum
 {
@@ -4123,15 +4108,17 @@ int set_reception_timestamp_synchrony(timestamp_sync_t sync);
 
 int set_reception_hint_offset(int32_t offset);
 
-
+typedef struct
+{
+	uint32_t timescale;
+	uint32_t time_offset;
+	uint8_t reserved_timestamp_sync;
+} lsmash_isom_rtp_hint_common_t;
 
 typedef struct
 {
-	//uint32_t timescale;
-	uint32_t time_offset;
-	timestamp_sync_t sync;
-	uint8_t reserved_timestamp_sync;
-} lsmash_isom_rtp_hint_common_t;
+	uint32_t rtp_track_id;
+} lsmash_isom_rtcp_hint_t;
 
 
 #ifdef _WIN32
