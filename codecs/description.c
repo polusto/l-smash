@@ -2278,19 +2278,20 @@ int isom_setup_rtp_hint_description(isom_stsd_t *stsd, lsmash_codec_type_t sampl
 	// configure the sample description
 	lsmash_codec_type_t hint_type = hint->type;
 
-	if (lsmash_check_codec_type_identical(hint_type, ISOM_CODEC_TYPE_RRTP_HINT))
+	
+
+	for (lsmash_entry_t *entry = summary->opaque->list.head; entry; entry = entry->next)
 	{
-		
-		err = isom_set_rtp_reception_description(hint, summary);
-		err = isom_set_rtp_additional_reception_description(hint, summary);
+		lsmash_codec_specific_t *specific = (lsmash_codec_specific_t *)entry->data;
+		/*lsmash_codec_specific_t *cs = lsmash_convert_codec_specific_format(specific, LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED);*/
 
-		for (lsmash_entry_t *entry = summary->opaque->list.head; entry; entry = entry->next)
+		if (lsmash_check_codec_type_identical(hint_type, ISOM_CODEC_TYPE_RRTP_HINT))
 		{
-			lsmash_codec_specific_t *specific = (lsmash_codec_specific_t *)entry->data;
-			/*lsmash_codec_specific_t *cs = lsmash_convert_codec_specific_format(specific, LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED);*/
-
 			if (specific->type == LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTP_HINT_COMMON)
 			{
+				err = isom_set_rtp_reception_description(hint, summary);
+				err = isom_set_rtp_additional_reception_description(hint, summary);
+
 				lsmash_isom_rtp_hint_common_t* rtp_param;
 				rtp_param = (lsmash_isom_rtp_hint_common_t *)specific->data.structured;
 				isom_tims_t *tims = isom_add_tims(hint);
@@ -2309,39 +2310,21 @@ int isom_setup_rtp_hint_description(isom_stsd_t *stsd, lsmash_codec_type_t sampl
 				goto fail;
 			}
 		}
-
-		//	//btrt->bufferSizeDB = data->bufferSizeDB;
-		//	//btrt->maxBitrate = data->maxBitrate;
-		//	//btrt->avgBitrate = data->avgBitrate;
-
-
-
-		//	isom_tsro_t *tsro = isom_add_tsro(hint);
-		//	if (!tsro)
-		//	{
-		//		lsmash_destroy_codec_specific_data(cs);
-		//		goto fail;
-		//	}
-		//	tsro->offset = 1;
-
-
-		//	isom_tssy_t *tssy = isom_add_tssy(hint);
-		//	if (!tssy)
-		//	{
-		//		lsmash_destroy_codec_specific_data(cs);
-		//		goto fail;
-		//	}
-		//	tssy->reserved_sync = 2;
-
-		//	lsmash_destroy_codec_specific_data(cs);
-		//	break;
-		//}
-		
+		else if (lsmash_check_codec_type_identical(hint_type, ISOM_CODEC_TYPE_RTCP_HINT))
+		{
+			lsmash_isom_rtcp_hint_t* rtcp_param;
+			rtcp_param = (lsmash_isom_rtcp_hint_t *)specific->data.structured;
+			err = isom_set_rtp_reception_description(hint, summary);
+			isom_trak_t *trak = (isom_trak_t *)hint->parent->parent->parent->parent->parent;
+			isom_tref_t *tref = isom_add_tref(trak);
+			isom_tref_type_t* tref_type = isom_add_track_reference_type(tref, ISOM_TREF_TYPE_CDSC);
+			tref_type->track_ID = malloc(sizeof(uint32_t));
+			*(tref_type->track_ID) = rtcp_param->rtp_track_id;
+		}
+		else
+			err = isom_set_rtp_reception_description(hint, summary);
 	}
-	else if (lsmash_check_codec_type_identical(hint_type, ISOM_CODEC_TYPE_RTCP_HINT))
-		err = isom_set_rtp_reception_description(hint, summary);
-	else
-		err = isom_set_rtp_reception_description(hint, summary);
+
 	if (err < 0)
 		goto fail;
 
