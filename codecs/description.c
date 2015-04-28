@@ -421,6 +421,9 @@ static int isom_duplicate_structured_specific_data( lsmash_codec_specific_t *dst
 		case LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTP_HINT_COMMON:
 			*(lsmash_isom_rtp_hint_common_t *)dst_data = *(lsmash_isom_rtp_hint_common_t *)src_data;
 			return 0;
+		case LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTCP_HINT:
+			*(lsmash_isom_rtcp_hint_t *)dst_data = *(lsmash_isom_rtcp_hint_t *)src_data;
+			return 0;
         default :
             return LSMASH_ERR_NAMELESS;
     }
@@ -876,9 +879,10 @@ static int isom_check_valid_summary( lsmash_summary_t *summary )
     else if( lsmash_check_codec_type_identical( sample_type, ISOM_CODEC_TYPE_ALAC_AUDIO )
           || lsmash_check_codec_type_identical( sample_type,   QT_CODEC_TYPE_ALAC_AUDIO ) )
 		  required_data_type = LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_AUDIO_ALAC;
-	else if (lsmash_check_codec_type_identical(sample_type, ISOM_CODEC_TYPE_RRTP_HINT)
-	|| lsmash_check_codec_type_identical(sample_type, ISOM_CODEC_TYPE_RTCP_HINT))
+	else if (lsmash_check_codec_type_identical(sample_type, ISOM_CODEC_TYPE_RRTP_HINT))
 		required_data_type = LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTP_HINT_COMMON;
+	else if (lsmash_check_codec_type_identical(sample_type, ISOM_CODEC_TYPE_RTCP_HINT))
+		required_data_type = LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTCP_HINT;
     if( required_data_type == LSMASH_CODEC_SPECIFIC_DATA_TYPE_UNSPECIFIED )
         return 0;
     return isom_get_codec_specific( summary->opaque, required_data_type ) ? 0 : LSMASH_ERR_INVALID_DATA;
@@ -2285,8 +2289,15 @@ int isom_setup_rtp_hint_description(isom_stsd_t *stsd, lsmash_codec_type_t sampl
 		lsmash_codec_specific_t *specific = (lsmash_codec_specific_t *)entry->data;
 		/*lsmash_codec_specific_t *cs = lsmash_convert_codec_specific_format(specific, LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED);*/
 
+		if (!specific)
+		{
+			err = LSMASH_ERR_NAMELESS;
+			goto fail;
+		}
+
 		if (lsmash_check_codec_type_identical(hint_type, ISOM_CODEC_TYPE_RRTP_HINT))
 		{
+
 			if (specific->type == LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTP_HINT_COMMON)
 			{
 				err = isom_set_rtp_reception_description(hint, summary);
@@ -2304,22 +2315,20 @@ int isom_setup_rtp_hint_description(isom_stsd_t *stsd, lsmash_codec_type_t sampl
 				tssy->reserved_sync = rtp_param->reserved_timestamp_sync;
 			}
 
-			if (!specific)
-			{
-				err = LSMASH_ERR_NAMELESS;
-				goto fail;
-			}
 		}
 		else if (lsmash_check_codec_type_identical(hint_type, ISOM_CODEC_TYPE_RTCP_HINT))
 		{
-			lsmash_isom_rtcp_hint_t* rtcp_param;
-			rtcp_param = (lsmash_isom_rtcp_hint_t *)specific->data.structured;
-			err = isom_set_rtp_reception_description(hint, summary);
-			isom_trak_t *trak = (isom_trak_t *)hint->parent->parent->parent->parent->parent;
-			isom_tref_t *tref = isom_add_tref(trak);
-			isom_tref_type_t* tref_type = isom_add_track_reference_type(tref, ISOM_TREF_TYPE_CDSC);
-			tref_type->track_ID = malloc(sizeof(uint32_t));
-			*(tref_type->track_ID) = rtcp_param->rtp_track_id;
+			if (specific->type == LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTCP_HINT)
+			{
+				lsmash_isom_rtcp_hint_t* rtcp_param;
+				rtcp_param = (lsmash_isom_rtcp_hint_t *)specific->data.structured;
+				err = isom_set_rtp_reception_description(hint, summary);
+				isom_trak_t *trak = (isom_trak_t *)hint->parent->parent->parent->parent->parent;
+				isom_tref_t *tref = isom_add_tref(trak);
+				isom_tref_type_t* tref_type = isom_add_track_reference_type(tref, ISOM_TREF_TYPE_CDSC);
+				tref_type->track_ID = malloc(sizeof(uint32_t));
+				*(tref_type->track_ID) = rtcp_param->rtp_track_id;
+			}
 		}
 		else
 			err = isom_set_rtp_reception_description(hint, summary);
