@@ -276,6 +276,10 @@ static int isom_initialize_structured_codec_specific_data( lsmash_codec_specific
 			specific->size = sizeof(lsmash_isom_rtp_hint_common_t);
 			specific->destruct = lsmash_free;
 			break;
+		case LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTCP_HINT:
+			specific->size = sizeof(lsmash_isom_rtcp_hint_t);
+			specific->destruct = lsmash_free;
+			break;
         default :
             specific->size     = 0;
             specific->destruct = isom_destruct_nothing;
