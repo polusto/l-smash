@@ -2332,6 +2332,7 @@ int isom_setup_rtp_hint_description(isom_stsd_t *stsd, lsmash_codec_type_t sampl
 				isom_tref_type_t* tref_type = isom_add_track_reference_type(tref, ISOM_TREF_TYPE_CDSC);
 				tref_type->track_ID = malloc(sizeof(uint32_t));
 				*(tref_type->track_ID) = rtcp_param->rtp_track_id;
+				tref_type->ref_count = 1;
 			}
 		}
 		else
