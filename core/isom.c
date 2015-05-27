@@ -4364,3 +4364,73 @@ int lsmash_set_copyright( lsmash_root_t *root, uint32_t track_ID, uint16_t ISO_l
     cprt->notice        = lsmash_memdup( notice, cprt->notice_length );
     return 0;
 }
+
+int lsmash_set_sdp
+(
+lsmash_root_t *root,
+uint32_t       track_ID,
+char          *sdptext
+)
+{
+	if (isom_check_initializer_present(root) < 0 || !sdptext)
+		return LSMASH_ERR_FUNCTION_PARAM;
+	lsmash_file_t *file = root->file;
+	if (!file->moov
+		|| !file->isom_compatible)
+		return LSMASH_ERR_NAMELESS;
+	isom_udta_t *udta;
+	if (track_ID)
+	{
+		isom_trak_t *trak = isom_get_trak(file, track_ID);
+		if (!trak || (!trak->udta && !isom_add_udta(trak)))
+			return LSMASH_ERR_NAMELESS;
+		udta = trak->udta;
+
+	}
+	else
+	{
+		if (!file->moov->udta && !isom_add_udta(file->moov))
+			return LSMASH_ERR_NAMELESS;
+		udta = file->moov->udta;
+	}
+	assert(udta);
+
+	isom_hnti_t* hnti;
+	if (!udta->hnti && !isom_add_hnti(udta))
+		return LSMASH_ERR_NAMELESS;
+
+	hnti = udta->hnti;
+
+	if (track_ID)
+	{
+		if (!isom_add_sdp(hnti))
+			return LSMASH_ERR_NAMELESS;
+
+		isom_sdp_t* sdp = hnti->sdp;
+		sdp->sdptext = sdptext;
+		sdp->sdp_length = strlen(sdptext) + 1;
+	}
+	else
+	{
+		if (!isom_add_rtp(hnti))
+			return LSMASH_ERR_NAMELESS;
+
+		isom_rtp_t* rtp = hnti->rtp;
+		rtp->descriptionformat = 'sdp ';
+		rtp->sdptext = sdptext;
+		rtp->sdp_length = strlen(sdptext) + 1;
+	}
+	//for (lsmash_entry_t *entry = udta->cprt_list.head; entry; entry = entry->next)
+	//{
+	//	isom_cprt_t *cprt = (isom_cprt_t *)entry->data;
+	//	if (!cprt || cprt->language == ISO_language)
+	//		return LSMASH_ERR_NAMELESS;
+	//}
+	//if (!isom_add_cprt(udta))
+	//	return LSMASH_ERR_NAMELESS;
+	//isom_cprt_t *cprt = (isom_cprt_t *)udta->cprt_list.tail->data;
+	//cprt->language = ISO_language;
+	//cprt->notice_length = strlen(notice) + 1;
+	//cprt->notice = lsmash_memdup(notice, cprt->notice_length);
+	return 0;
+}
