@@ -4407,8 +4407,8 @@ char          *sdptext
 			return LSMASH_ERR_NAMELESS;
 
 		isom_sdp_t* sdp = hnti->sdp;
-		sdp->sdptext = sdptext;
 		sdp->sdp_length = strlen(sdptext) + 1;
+		sdp->sdptext = lsmash_memdup(sdptext, sdp->sdp_length);
 	}
 	else
 	{
@@ -4417,20 +4417,9 @@ char          *sdptext
 
 		isom_rtp_t* rtp = hnti->rtp;
 		rtp->descriptionformat = 'sdp ';
-		rtp->sdptext = sdptext;
+		/*rtp->sdptext = sdptext;*/
 		rtp->sdp_length = strlen(sdptext) + 1;
+		rtp->sdptext = lsmash_memdup(sdptext, rtp->sdp_length);
 	}
-	//for (lsmash_entry_t *entry = udta->cprt_list.head; entry; entry = entry->next)
-	//{
-	//	isom_cprt_t *cprt = (isom_cprt_t *)entry->data;
-	//	if (!cprt || cprt->language == ISO_language)
-	//		return LSMASH_ERR_NAMELESS;
-	//}
-	//if (!isom_add_cprt(udta))
-	//	return LSMASH_ERR_NAMELESS;
-	//isom_cprt_t *cprt = (isom_cprt_t *)udta->cprt_list.tail->data;
-	//cprt->language = ISO_language;
-	//cprt->notice_length = strlen(notice) + 1;
-	//cprt->notice = lsmash_memdup(notice, cprt->notice_length);
 	return 0;
 }
