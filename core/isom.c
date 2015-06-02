@@ -4407,7 +4407,7 @@ char          *sdptext
 			return LSMASH_ERR_NAMELESS;
 
 		isom_sdp_t* sdp = hnti->sdp;
-		sdp->sdp_length = strlen(sdptext) + 1;
+		sdp->sdp_length = strlen(sdptext);/* leaves \0 out*/
 		sdp->sdptext = lsmash_memdup(sdptext, sdp->sdp_length);
 	}
 	else
@@ -4417,8 +4417,7 @@ char          *sdptext
 
 		isom_rtp_t* rtp = hnti->rtp;
 		rtp->descriptionformat = 'sdp ';
-		/*rtp->sdptext = sdptext;*/
-		rtp->sdp_length = strlen(sdptext) + 1;
+		rtp->sdp_length = strlen(sdptext); /* leaves \0 out*/
 		rtp->sdptext = lsmash_memdup(sdptext, rtp->sdp_length);
 	}
 	return 0;
