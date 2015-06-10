@@ -2279,9 +2279,12 @@ int isom_setup_rtp_hint_description(isom_stsd_t *stsd, lsmash_codec_type_t sampl
 	if (!stsd || !stsd->file || !summary)
 		return LSMASH_ERR_NAMELESS;
 	int err = isom_check_valid_summary((lsmash_summary_t *)summary);
+
 	isom_hint_entry_t *hint = isom_add_hint_description(stsd, sample_type);
     if( !hint )
         return LSMASH_ERR_NAMELESS;
+
+	hint->data_reference_index = summary->data_ref_index;
 
 	// configure the sample description
 	lsmash_codec_type_t hint_type = hint->type;
