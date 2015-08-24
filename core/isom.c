@@ -1255,6 +1255,18 @@ int isom_update_bitrate_description( isom_mdia_t *mdia )
                 btrt->avgBitrate   = avgBitrate;
             }
         }
+		else if (lsmash_check_codec_type_identical(sample_type, ISOM_CODEC_TYPE_RRTP_HINT))
+		{
+			isom_hmhd_t *hmhd = mdia->minf->hmhd;
+			if (hmhd)
+			{
+				if ((err = isom_calculate_bitrate_description(mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index)) < 0)
+					return err;
+
+				hmhd->avgbitrate = avgBitrate;
+				hmhd->maxbitrate = maxBitrate;
+			}
+		}
         else if( lsmash_check_codec_type_identical( sample_type, ISOM_CODEC_TYPE_MP4V_VIDEO ) )
         {
             isom_visual_entry_t *stsd_data = (isom_visual_entry_t *)sample_entry;
