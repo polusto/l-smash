@@ -1404,7 +1404,7 @@ int isom_update_bitrate_description( isom_mdia_t *mdia )
 				if ((err = isom_calculate_bitrate_description(mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index)) < 0)
 					return err;
 
-				if ((err = isom_calculate_PDU_description(mdia, maxPDUsize, avgPDUsize, &sample_description_index, sample_extra_data_size)) < 0)
+				if ((err = isom_calculate_PDU_description(mdia, &maxPDUsize, &avgPDUsize, &sample_description_index, sample_extra_data_size)) < 0)
 					return err;
 
 				hmhd->avgbitrate = avgBitrate;
@@ -1425,7 +1425,7 @@ int isom_update_bitrate_description( isom_mdia_t *mdia )
 				if ((err = isom_calculate_bitrate_description(mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index)) < 0)
 					return err;
 
-				if ((err = isom_calculate_PDU_description(mdia, maxPDUsize, avgPDUsize, &sample_description_index, sample_extra_data_size)) < 0)
+				if ((err = isom_calculate_PDU_description(mdia, &maxPDUsize, &avgPDUsize, &sample_description_index, sample_extra_data_size)) < 0)
 					return err;
 
 				hmhd->avgbitrate = avgBitrate;
