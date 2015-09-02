@@ -1082,7 +1082,9 @@ static int isom_calculate_PDU_description(isom_mdia_t *mdia, uint16_t *maxPDUsiz
 	if (next_stsc_entry && !next_stsc_entry->data)
 		return LSMASH_ERR_INVALID_DATA;
 	uint64_t dts = 0;
-	uint32_t timescale = mdia->mdhd->timescale;
+
+	uint64_t total_PDU_size = 0;
+	uint32_t PDU_amount = 0;
 	uint32_t chunk_number = 0;
 	uint32_t sample_number_in_stts = 1;
 	uint32_t sample_number_in_chunk = 1;
@@ -1194,14 +1196,15 @@ static int isom_calculate_PDU_description(isom_mdia_t *mdia, uint16_t *maxPDUsiz
 			return LSMASH_ERR_INVALID_DATA;
 		size -= sample_extradata_length;
 
-		*avgPDUsize += size;
+		total_PDU_size += size;
+
+		++PDU_amount;
 
 		if (size > *maxPDUsize)
 			*maxPDUsize = size;
 		
 	}
-	double duration = (double)mdia->mdhd->duration / timescale;
-	*avgPDUsize = (uint32_t)(*avgPDUsize / duration);
+	*avgPDUsize = (uint16_t)(total_PDU_size / PDU_amount);
 }
 static int isom_calculate_bitrate_description( isom_mdia_t *mdia, uint32_t *bufferSizeDB, uint32_t *maxBitrate, uint32_t *avgBitrate, uint32_t sample_description_index )
 {
