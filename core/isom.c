@@ -1070,6 +1070,139 @@ static inline int isom_increment_sample_number_in_entry( uint32_t *sample_number
     return 0;
 }
 
+static int isom_calculate_PDU_description(isom_mdia_t *mdia, uint16_t *maxPDUsize, uint16_t *avgPDUsize, uint32_t sample_description_index, uint32_t sample_extradata_length)
+{
+	isom_stsz_t *stsz = mdia->minf->stbl->stsz;
+	lsmash_entry_t *stsz_entry = stsz->list ? stsz->list->head : NULL;
+	lsmash_entry_t *stts_entry = mdia->minf->stbl->stts->list->head;
+	lsmash_entry_t *stsc_entry = NULL;
+	lsmash_entry_t *next_stsc_entry = mdia->minf->stbl->stsc->list->head;
+	isom_stts_entry_t *stts_data = NULL;
+	isom_stsc_entry_t *stsc_data = NULL;
+	if (next_stsc_entry && !next_stsc_entry->data)
+		return LSMASH_ERR_INVALID_DATA;
+	uint64_t dts = 0;
+	uint32_t timescale = mdia->mdhd->timescale;
+	uint32_t chunk_number = 0;
+	uint32_t sample_number_in_stts = 1;
+	uint32_t sample_number_in_chunk = 1;
+
+	*maxPDUsize = 0;
+	*avgPDUsize = 0;
+
+	while (stts_entry)
+	{
+		int err;
+		if (!stsc_data || sample_number_in_chunk == stsc_data->samples_per_chunk)
+		{
+			/* Move the next chunk. */
+			sample_number_in_chunk = 1;
+			++chunk_number;
+			/* Check if the next entry is broken. */
+			while (next_stsc_entry && ((isom_stsc_entry_t *)next_stsc_entry->data)->first_chunk < chunk_number)
+			{
+				/* Just skip broken next entry. */
+				next_stsc_entry = next_stsc_entry->next;
+				if (next_stsc_entry && !next_stsc_entry->data)
+					return LSMASH_ERR_INVALID_DATA;
+			}
+			/* Check if the next chunk belongs to the next sequence of chunks. */
+			if (next_stsc_entry && ((isom_stsc_entry_t *)next_stsc_entry->data)->first_chunk == chunk_number)
+			{
+				stsc_entry = next_stsc_entry;
+				next_stsc_entry = next_stsc_entry->next;
+				if (next_stsc_entry && !next_stsc_entry->data)
+					return LSMASH_ERR_INVALID_DATA;
+				stsc_data = (isom_stsc_entry_t *)stsc_entry->data;
+				/* Check if the next contiguous chunks belong to given sample description. */
+				if (stsc_data->sample_description_index != sample_description_index)
+				{
+					/* Skip chunks which don't belong to given sample description. */
+					uint32_t number_of_skips = 0;
+					uint32_t first_chunk = stsc_data->first_chunk;
+					uint32_t samples_per_chunk = stsc_data->samples_per_chunk;
+					while (next_stsc_entry)
+					{
+						if (((isom_stsc_entry_t *)next_stsc_entry->data)->sample_description_index != sample_description_index)
+						{
+							stsc_data = (isom_stsc_entry_t *)next_stsc_entry->data;
+							number_of_skips += (stsc_data->first_chunk - first_chunk) * samples_per_chunk;
+							first_chunk = stsc_data->first_chunk;
+							samples_per_chunk = stsc_data->samples_per_chunk;
+						}
+						else if (((isom_stsc_entry_t *)next_stsc_entry->data)->first_chunk <= first_chunk)
+							;   /* broken entry */
+						else
+							break;
+						/* Just skip the next entry. */
+						next_stsc_entry = next_stsc_entry->next;
+						if (next_stsc_entry && !next_stsc_entry->data)
+							return LSMASH_ERR_INVALID_DATA;
+					}
+					if (!next_stsc_entry)
+						break;      /* There is no more chunks which don't belong to given sample description. */
+					number_of_skips += (((isom_stsc_entry_t *)next_stsc_entry->data)->first_chunk - first_chunk) * samples_per_chunk;
+					for (uint32_t i = 0; i < number_of_skips; i++)
+					{
+						if (stsz->list)
+						{
+							if (!stsz_entry)
+								break;
+							stsz_entry = stsz_entry->next;
+						}
+						if (!stts_entry)
+							break;
+						if ((err = isom_increment_sample_number_in_entry(&sample_number_in_stts,
+							((isom_stts_entry_t *)stts_entry->data)->sample_count,
+							&stts_entry)) < 0)
+							return err;
+					}
+					if ((stsz->list && !stsz_entry) || !stts_entry)
+						break;
+					chunk_number = stsc_data->first_chunk;
+				}
+			}
+		}
+		else
+			++sample_number_in_chunk;
+		/* Get current sample's size. */
+		uint32_t size;
+		if (stsz->list)
+		{
+			if (!stsz_entry)
+				break;
+			isom_stsz_entry_t *stsz_data = (isom_stsz_entry_t *)stsz_entry->data;
+			if (!stsz_data)
+				return LSMASH_ERR_INVALID_DATA;
+			size = stsz_data->entry_size;
+			stsz_entry = stsz_entry->next;
+		}
+		else
+			size = stsz->sample_size;
+		/* Get current sample's DTS. */
+		if (stts_data)
+			dts += stts_data->sample_delta;
+		stts_data = (isom_stts_entry_t *)stts_entry->data;
+		if (!stts_data)
+			return LSMASH_ERR_INVALID_DATA;
+		if ((err = isom_increment_sample_number_in_entry(&sample_number_in_stts, stts_data->sample_count, &stts_entry)) < 0)
+			return err;
+
+		/* Calculate PDU description. */
+
+		if (size < sample_extradata_length)
+			return LSMASH_ERR_INVALID_DATA;
+		size -= sample_extradata_length;
+
+		*avgPDUsize += size;
+
+		if (size > *maxPDUsize)
+			*maxPDUsize = size;
+		
+	}
+	double duration = (double)mdia->mdhd->duration / timescale;
+	*avgPDUsize = (uint32_t)(*avgPDUsize / duration);
+}
 static int isom_calculate_bitrate_description( isom_mdia_t *mdia, uint32_t *bufferSizeDB, uint32_t *maxBitrate, uint32_t *avgBitrate, uint32_t sample_description_index )
 {
     isom_stsz_t *stsz               = mdia->minf->stbl->stsz;
@@ -1091,6 +1224,7 @@ static int isom_calculate_bitrate_description( isom_mdia_t *mdia, uint32_t *buff
     *bufferSizeDB = 0;
     *maxBitrate   = 0;
     *avgBitrate   = 0;
+
     while( stts_entry )
     {
         int err;
@@ -1232,9 +1366,12 @@ int isom_update_bitrate_description( isom_mdia_t *mdia )
             return LSMASH_ERR_INVALID_DATA;
         ++sample_description_index;
         int      err;
-        uint32_t bufferSizeDB;
-        uint32_t maxBitrate;
-        uint32_t avgBitrate;
+        uint32_t bufferSizeDB = 0;
+        uint32_t maxBitrate   = 0;
+        uint32_t avgBitrate   = 0;
+		uint32_t maxPDUsize   = 0;
+		uint32_t avgPDUsize   = 0;
+
         /* set bitrate info */
         lsmash_codec_type_t sample_type = sample_entry->type;
         if( lsmash_check_codec_type_identical( sample_type, ISOM_CODEC_TYPE_AVC1_VIDEO )
@@ -1258,13 +1395,43 @@ int isom_update_bitrate_description( isom_mdia_t *mdia )
 		else if (lsmash_check_codec_type_identical(sample_type, ISOM_CODEC_TYPE_RRTP_HINT))
 		{
 			isom_hmhd_t *hmhd = mdia->minf->hmhd;
+
+			// the sample header and constructor size.
+			uint32_t sample_extra_data_size = 4 + 15;
+
 			if (hmhd)
 			{
 				if ((err = isom_calculate_bitrate_description(mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index)) < 0)
 					return err;
 
+				if ((err = isom_calculate_PDU_description(mdia, maxPDUsize, avgPDUsize, &sample_description_index, sample_extra_data_size)) < 0)
+					return err;
+
 				hmhd->avgbitrate = avgBitrate;
 				hmhd->maxbitrate = maxBitrate;
+				hmhd->avgPDUsize = avgPDUsize;
+				hmhd->maxPDUsize = maxPDUsize;
+			}
+		}
+		else if (lsmash_check_codec_type_identical(sample_type, ISOM_CODEC_TYPE_RTCP_HINT))
+		{
+			isom_hmhd_t *hmhd = mdia->minf->hmhd;
+
+			// the sample header size.
+			uint32_t sample_extra_data_size = 4;
+
+			if (hmhd)
+			{
+				if ((err = isom_calculate_bitrate_description(mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index)) < 0)
+					return err;
+
+				if ((err = isom_calculate_PDU_description(mdia, maxPDUsize, avgPDUsize, &sample_description_index, sample_extra_data_size)) < 0)
+					return err;
+
+				hmhd->avgbitrate = avgBitrate;
+				hmhd->maxbitrate = maxBitrate;
+				hmhd->avgPDUsize = avgPDUsize;
+				hmhd->maxPDUsize = maxPDUsize;
 			}
 		}
         else if( lsmash_check_codec_type_identical( sample_type, ISOM_CODEC_TYPE_MP4V_VIDEO ) )
