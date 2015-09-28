@@ -46,7 +46,6 @@ int isom_setup_sample_description
 int isom_setup_rtp_hint_description
 (
 	isom_stsd_t      *stsd,
-	lsmash_codec_type_t     sample_type,
 	lsmash_rtp_hint_summary_t *summary
 );
 

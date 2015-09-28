@@ -919,13 +919,23 @@ static inline int isom_increment_sample_number_in_entry
     return 0;
 }
 
-static int isom_calculate_PDU_description(isom_mdia_t *mdia, uint16_t *maxPDUsize, uint16_t *avgPDUsize, uint32_t sample_description_index, uint32_t sample_extradata_length)
+
+int isom_calculate_PDU_description
+(
+isom_stbl_t *stbl,
+isom_mdhd_t *mdhd, 
+uint16_t *maxPDUsize, 
+uint16_t *avgPDUsize, 
+uint32_t sample_description_index, 
+uint32_t sample_extradata_length
+)
 {
-	isom_stsz_t *stsz = mdia->minf->stbl->stsz;
-	lsmash_entry_t *stsz_entry = stsz->list ? stsz->list->head : NULL;
-	lsmash_entry_t *stts_entry = mdia->minf->stbl->stts->list->head;
+	isom_stsz_t *stsz = stbl->stsz;
+	lsmash_entry_list_t *stsz_list = stsz ? stsz->list : stbl->stz2->list;
+	lsmash_entry_t *stsz_entry = stsz_list ? stsz_list->head : NULL;
+	lsmash_entry_t *stts_entry = stbl->stts->list->head;
 	lsmash_entry_t *stsc_entry = NULL;
-	lsmash_entry_t *next_stsc_entry = mdia->minf->stbl->stsc->list->head;
+	lsmash_entry_t *next_stsc_entry = stbl->stsc->list->head;
 	isom_stts_entry_t *stts_data = NULL;
 	isom_stsc_entry_t *stsc_data = NULL;
 	if (next_stsc_entry && !next_stsc_entry->data)
@@ -937,7 +947,7 @@ static int isom_calculate_PDU_description(isom_mdia_t *mdia, uint16_t *maxPDUsiz
 	uint32_t chunk_number = 0;
 	uint32_t sample_number_in_stts = 1;
 	uint32_t sample_number_in_chunk = 1;
-
+	uint32_t constant_sample_size = stsz ? stsz->sample_size : 0;
 	*maxPDUsize = 0;
 	*avgPDUsize = 0;
 
@@ -995,7 +1005,7 @@ static int isom_calculate_PDU_description(isom_mdia_t *mdia, uint16_t *maxPDUsiz
 					number_of_skips += (((isom_stsc_entry_t *)next_stsc_entry->data)->first_chunk - first_chunk) * samples_per_chunk;
 					for (uint32_t i = 0; i < number_of_skips; i++)
 					{
-						if (stsz->list)
+						if (stsz_list)
 						{
 							if (!stsz_entry)
 								break;
@@ -1008,7 +1018,7 @@ static int isom_calculate_PDU_description(isom_mdia_t *mdia, uint16_t *maxPDUsiz
 							&stts_entry)) < 0)
 							return err;
 					}
-					if ((stsz->list && !stsz_entry) || !stts_entry)
+					if ((stsz_list && !stsz_entry) || !stts_entry)
 						break;
 					chunk_number = stsc_data->first_chunk;
 				}
@@ -1018,7 +1028,7 @@ static int isom_calculate_PDU_description(isom_mdia_t *mdia, uint16_t *maxPDUsiz
 			++sample_number_in_chunk;
 		/* Get current sample's size. */
 		uint32_t size;
-		if (stsz->list)
+		if (stsz_list)
 		{
 			if (!stsz_entry)
 				break;
@@ -1029,7 +1039,7 @@ static int isom_calculate_PDU_description(isom_mdia_t *mdia, uint16_t *maxPDUsiz
 			stsz_entry = stsz_entry->next;
 		}
 		else
-			size = stsz->sample_size;
+			size = constant_sample_size;
 		/* Get current sample's DTS. */
 		if (stts_data)
 			dts += stts_data->sample_delta;
