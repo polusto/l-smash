@@ -712,8 +712,8 @@ static int isom_print_hmhd( FILE *fp, lsmash_file_t *file, isom_box_t *box, int 
     isom_print_box_common( fp, indent++, box, "Hint Media Header Box" );
     lsmash_ifprintf( fp, indent, "maxPDUsize = %"PRIu16"\n", hmhd->maxPDUsize );
     lsmash_ifprintf( fp, indent, "avgPDUsize = %"PRIu16"\n", hmhd->avgPDUsize );
-    lsmash_ifprintf( fp, indent, "maxbitrate = %"PRIu32"\n", hmhd->maxbitrate );
-    lsmash_ifprintf( fp, indent, "avgbitrate = %"PRIu32"\n", hmhd->avgbitrate );
+    lsmash_ifprintf( fp, indent, "maxbitrate = %"PRIu32"\n", hmhd->maxBitrate );
+    lsmash_ifprintf( fp, indent, "avgbitrate = %"PRIu32"\n", hmhd->avgBitrate );
     lsmash_ifprintf( fp, indent, "reserved = 0x%08"PRIx32"\n", hmhd->reserved );
     return 0;
 }

@@ -738,8 +738,8 @@ static int isom_read_hmhd( lsmash_file_t *file, isom_box_t *box, isom_box_t *par
     lsmash_bs_t *bs = file->bs;
     hmhd->maxPDUsize = lsmash_bs_get_be16( bs );
     hmhd->avgPDUsize = lsmash_bs_get_be16( bs );
-    hmhd->maxbitrate = lsmash_bs_get_be32( bs );
-    hmhd->avgbitrate = lsmash_bs_get_be32( bs );
+    hmhd->maxBitrate = lsmash_bs_get_be32( bs );
+    hmhd->avgBitrate = lsmash_bs_get_be32( bs );
     hmhd->reserved   = lsmash_bs_get_be32( bs );
     return isom_read_leaf_box_common_last_process( file, box, level, hmhd );
 }

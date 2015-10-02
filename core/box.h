@@ -365,8 +365,8 @@ typedef struct
     ISOM_FULLBOX_COMMON;
     uint16_t maxPDUsize;        /* the size in bytes of the largest PDU in this (hint) stream */
     uint16_t avgPDUsize;        /* the average size of a PDU over the entire presentation */
-    uint32_t maxbitrate;        /* the maximum rate in bits/second over any window of one second */
-    uint32_t avgbitrate;        /* the average rate in bits/second over the entire presentation */
+    uint32_t maxBitrate;        /* the maximum rate in bits/second over any window of one second */
+    uint32_t avgBitrate;        /* the average rate in bits/second over the entire presentation */
     uint32_t reserved;
 } isom_hmhd_t;
 

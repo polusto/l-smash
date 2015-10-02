@@ -299,8 +299,8 @@ static int isom_write_hmhd( lsmash_bs_t *bs, isom_box_t *box )
     isom_bs_put_box_common( bs, hmhd );
     lsmash_bs_put_be16( bs, hmhd->maxPDUsize );
     lsmash_bs_put_be16( bs, hmhd->avgPDUsize );
-    lsmash_bs_put_be32( bs, hmhd->maxbitrate );
-    lsmash_bs_put_be32( bs, hmhd->avgbitrate );
+    lsmash_bs_put_be32( bs, hmhd->maxBitrate );
+    lsmash_bs_put_be32( bs, hmhd->avgBitrate );
     lsmash_bs_put_be32( bs, hmhd->reserved );
     return 0;
 }

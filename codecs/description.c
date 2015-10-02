@@ -3168,10 +3168,11 @@ int isom_get_implicit_qt_fixed_comp_audio_sample_quants
 int hint_update_bitrate(isom_stbl_t *stbl, isom_mdhd_t *mdhd, uint32_t sample_description_index)
 {
 	uint32_t bufferSizeDB;
-	uint32_t maxBitrate;
-	uint32_t avgBitrate;
+	uint32_t maxBitrate = 0;
+	uint32_t avgBitrate = 0;
 	uint32_t maxPDUsize = 0;
 	uint32_t avgPDUsize = 0;
+	isom_hmhd_t *hmhd = ((isom_mdia_t*)(mdhd->parent))->minf->hmhd;
 	int err = LSMASH_ERR_NAMELESS;
 
 	for (lsmash_entry_t *entry = stbl->stsd->list.head; entry; entry = entry->next)
@@ -3193,6 +3194,11 @@ int hint_update_bitrate(isom_stbl_t *stbl, isom_mdhd_t *mdhd, uint32_t sample_de
 
 
 	err = isom_calculate_bitrate_description(stbl, mdhd, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index);
+
+	hmhd->maxBitrate = maxBitrate;
+	hmhd->avgBitrate = avgBitrate;
+	hmhd->maxPDUsize = maxPDUsize;
+	hmhd->avgPDUsize = avgPDUsize;
 
 	return err;
 }
