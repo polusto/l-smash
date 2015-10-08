@@ -368,6 +368,11 @@ typedef struct
     uint32_t maxBitrate;        /* the maximum rate in bits/second over any window of one second */
     uint32_t avgBitrate;        /* the average rate in bits/second over the entire presentation */
     uint32_t reserved;
+
+	// temp variables for calculating avgPDUsize and maxPDUsize
+	uint64_t combinedPDUsize;
+	uint64_t PDUcount;
+
 } isom_hmhd_t;
 
 /* Null Media Header Box

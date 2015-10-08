@@ -3170,35 +3170,15 @@ int hint_update_bitrate(isom_stbl_t *stbl, isom_mdhd_t *mdhd, uint32_t sample_de
 	uint32_t bufferSizeDB;
 	uint32_t maxBitrate = 0;
 	uint32_t avgBitrate = 0;
-	uint32_t maxPDUsize = 0;
-	uint32_t avgPDUsize = 0;
 	isom_hmhd_t *hmhd = ((isom_mdia_t*)(mdhd->parent))->minf->hmhd;
 	int err = LSMASH_ERR_NAMELESS;
 
-	for (lsmash_entry_t *entry = stbl->stsd->list.head; entry; entry = entry->next)
-	{
-		isom_sample_entry_t *sample_entry = (isom_sample_entry_t *)entry->data;
-		lsmash_codec_type_t sample_type = sample_entry->type;
-
-		if (lsmash_check_codec_type_identical(sample_type, ISOM_CODEC_TYPE_RRTP_HINT))
-		{
-			if ((err = isom_calculate_PDU_description(stbl, mdhd, &maxPDUsize, &avgPDUsize, sample_description_index, 4 + 15)) < 0)
-				return err;
-		}
-		else if (lsmash_check_codec_type_identical(sample_type, ISOM_CODEC_TYPE_RTCP_HINT))
-		{
-			if ((err = isom_calculate_PDU_description(stbl, mdhd, &maxPDUsize, &avgPDUsize, sample_description_index, 4)) < 0)
-				return err;
-		}
-	}
-
+	hmhd->avgPDUsize = hmhd->combinedPDUsize / hmhd->PDUcount;
 
 	err = isom_calculate_bitrate_description(stbl, mdhd, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index);
 
 	hmhd->maxBitrate = maxBitrate;
 	hmhd->avgBitrate = avgBitrate;
-	hmhd->maxPDUsize = maxPDUsize;
-	hmhd->avgPDUsize = avgPDUsize;
 
 	return err;
 }

@@ -919,153 +919,6 @@ static inline int isom_increment_sample_number_in_entry
     return 0;
 }
 
-
-int isom_calculate_PDU_description
-(
-isom_stbl_t *stbl,
-isom_mdhd_t *mdhd, 
-uint16_t *maxPDUsize, 
-uint16_t *avgPDUsize, 
-uint32_t sample_description_index, 
-uint32_t sample_extradata_length
-)
-{
-	isom_stsz_t *stsz = stbl->stsz;
-	lsmash_entry_list_t *stsz_list = stsz ? stsz->list : stbl->stz2->list;
-	lsmash_entry_t *stsz_entry = stsz_list ? stsz_list->head : NULL;
-	lsmash_entry_t *stts_entry = stbl->stts->list->head;
-	lsmash_entry_t *stsc_entry = NULL;
-	lsmash_entry_t *next_stsc_entry = stbl->stsc->list->head;
-	isom_stts_entry_t *stts_data = NULL;
-	isom_stsc_entry_t *stsc_data = NULL;
-	if (next_stsc_entry && !next_stsc_entry->data)
-		return LSMASH_ERR_INVALID_DATA;
-	uint64_t dts = 0;
-
-	uint64_t total_PDU_size = 0;
-	uint32_t PDU_amount = 0;
-	uint32_t chunk_number = 0;
-	uint32_t sample_number_in_stts = 1;
-	uint32_t sample_number_in_chunk = 1;
-	uint32_t constant_sample_size = stsz ? stsz->sample_size : 0;
-	*maxPDUsize = 0;
-	*avgPDUsize = 0;
-
-	while (stts_entry)
-	{
-		int err;
-		if (!stsc_data || sample_number_in_chunk == stsc_data->samples_per_chunk)
-		{
-			/* Move the next chunk. */
-			sample_number_in_chunk = 1;
-			++chunk_number;
-			/* Check if the next entry is broken. */
-			while (next_stsc_entry && ((isom_stsc_entry_t *)next_stsc_entry->data)->first_chunk < chunk_number)
-			{
-				/* Just skip broken next entry. */
-				next_stsc_entry = next_stsc_entry->next;
-				if (next_stsc_entry && !next_stsc_entry->data)
-					return LSMASH_ERR_INVALID_DATA;
-			}
-			/* Check if the next chunk belongs to the next sequence of chunks. */
-			if (next_stsc_entry && ((isom_stsc_entry_t *)next_stsc_entry->data)->first_chunk == chunk_number)
-			{
-				stsc_entry = next_stsc_entry;
-				next_stsc_entry = next_stsc_entry->next;
-				if (next_stsc_entry && !next_stsc_entry->data)
-					return LSMASH_ERR_INVALID_DATA;
-				stsc_data = (isom_stsc_entry_t *)stsc_entry->data;
-				/* Check if the next contiguous chunks belong to given sample description. */
-				if (stsc_data->sample_description_index != sample_description_index)
-				{
-					/* Skip chunks which don't belong to given sample description. */
-					uint32_t number_of_skips = 0;
-					uint32_t first_chunk = stsc_data->first_chunk;
-					uint32_t samples_per_chunk = stsc_data->samples_per_chunk;
-					while (next_stsc_entry)
-					{
-						if (((isom_stsc_entry_t *)next_stsc_entry->data)->sample_description_index != sample_description_index)
-						{
-							stsc_data = (isom_stsc_entry_t *)next_stsc_entry->data;
-							number_of_skips += (stsc_data->first_chunk - first_chunk) * samples_per_chunk;
-							first_chunk = stsc_data->first_chunk;
-							samples_per_chunk = stsc_data->samples_per_chunk;
-						}
-						else if (((isom_stsc_entry_t *)next_stsc_entry->data)->first_chunk <= first_chunk)
-							;   /* broken entry */
-						else
-							break;
-						/* Just skip the next entry. */
-						next_stsc_entry = next_stsc_entry->next;
-						if (next_stsc_entry && !next_stsc_entry->data)
-							return LSMASH_ERR_INVALID_DATA;
-					}
-					if (!next_stsc_entry)
-						break;      /* There is no more chunks which don't belong to given sample description. */
-					number_of_skips += (((isom_stsc_entry_t *)next_stsc_entry->data)->first_chunk - first_chunk) * samples_per_chunk;
-					for (uint32_t i = 0; i < number_of_skips; i++)
-					{
-						if (stsz_list)
-						{
-							if (!stsz_entry)
-								break;
-							stsz_entry = stsz_entry->next;
-						}
-						if (!stts_entry)
-							break;
-						if ((err = isom_increment_sample_number_in_entry(&sample_number_in_stts,
-							((isom_stts_entry_t *)stts_entry->data)->sample_count,
-							&stts_entry)) < 0)
-							return err;
-					}
-					if ((stsz_list && !stsz_entry) || !stts_entry)
-						break;
-					chunk_number = stsc_data->first_chunk;
-				}
-			}
-		}
-		else
-			++sample_number_in_chunk;
-		/* Get current sample's size. */
-		uint32_t size;
-		if (stsz_list)
-		{
-			if (!stsz_entry)
-				break;
-			isom_stsz_entry_t *stsz_data = (isom_stsz_entry_t *)stsz_entry->data;
-			if (!stsz_data)
-				return LSMASH_ERR_INVALID_DATA;
-			size = stsz_data->entry_size;
-			stsz_entry = stsz_entry->next;
-		}
-		else
-			size = constant_sample_size;
-		/* Get current sample's DTS. */
-		if (stts_data)
-			dts += stts_data->sample_delta;
-		stts_data = (isom_stts_entry_t *)stts_entry->data;
-		if (!stts_data)
-			return LSMASH_ERR_INVALID_DATA;
-		if ((err = isom_increment_sample_number_in_entry(&sample_number_in_stts, stts_data->sample_count, &stts_entry)) < 0)
-			return err;
-
-		/* Calculate PDU description. */
-
-		if (size < sample_extradata_length)
-			return LSMASH_ERR_INVALID_DATA;
-		size -= sample_extradata_length;
-
-		total_PDU_size += size;
-
-		++PDU_amount;
-
-		if (size > *maxPDUsize)
-			*maxPDUsize = size;
-		
-	}
-	*avgPDUsize = (uint16_t)(total_PDU_size / PDU_amount);
-}
-
 int isom_calculate_bitrate_description
 (
     isom_stbl_t *stbl,
@@ -1442,6 +1295,11 @@ isom_trak_t *isom_track_create( lsmash_file_t *file, lsmash_media_type media_typ
         case ISOM_MEDIA_HANDLER_TYPE_HINT_TRACK :
             if( !isom_add_hmhd( trak->mdia->minf ) )
                 goto fail;
+			else
+			{
+				trak->mdia->minf->hmhd->combinedPDUsize = 0;
+				trak->mdia->minf->hmhd->PDUcount = 0;
+			}
             break;
         case ISOM_MEDIA_HANDLER_TYPE_TEXT_TRACK :
             if( file->qt_compatible || file->itunes_movie )
@@ -4076,6 +3934,21 @@ static int isom_append_sample_internal
     return isom_pool_sample( current_pool, sample, samples_per_packet );
 }
 
+// stops compiler from expanding the variable
+#pragma pack(push, 1)
+typedef struct
+{
+	char trackrefindex;
+	uint16_t length;
+	uint32_t samplenumber;
+	uint32_t sampleoffset;/* indicates where the payload is located within sample*/
+	uint16_t bytesperblock;
+	uint16_t samplesperblock;
+}rtpsamplecontructor;
+#pragma pack(pop)
+
+const unsigned int RTPHEADERSIZE = 12;
+
 int isom_append_sample_by_type
 (
     void                *track,
@@ -4114,6 +3987,48 @@ int isom_append_sample_by_type
         lsmash_delete_sample( sample );
         return 0;
     }
+	else if (lsmash_check_codec_type_identical(sample_entry->type, ISOM_CODEC_TYPE_RRTP_HINT))
+	{
+		//calculate statistics for hmhd box
+
+		isom_trak_t *track_box = (isom_trak_t*)track;
+		isom_hmhd_t *hmhd = track_box->mdia->minf->hmhd;
+		uint16_t packetcount = 0;
+		memcpy(&packetcount, sample->data, sizeof(uint16_t));
+		uint8_t *data = sample->data + 2 * sizeof(uint16_t) + RTPHEADERSIZE;
+
+		hmhd->combinedPDUsize += sample->length - packetcount*sizeof(rtpsamplecontructor) - 2 * sizeof(uint16_t);
+		hmhd->PDUcount += packetcount;
+
+		for (unsigned int i = 0; i < packetcount; ++i)
+		{
+			rtpsamplecontructor cons;
+			memcpy(&cons, data, sizeof(rtpsamplecontructor));
+
+			hmhd->maxPDUsize = hmhd->maxPDUsize + RTPHEADERSIZE > cons.length + RTPHEADERSIZE ? hmhd->maxPDUsize + RTPHEADERSIZE : cons.length + RTPHEADERSIZE;
+
+			data += sizeof(rtpsamplecontructor) + RTPHEADERSIZE;
+		}
+	}
+	else if (lsmash_check_codec_type_identical(sample_entry->type, ISOM_CODEC_TYPE_RTCP_HINT))
+	{
+		//calculate statistics for hmhd box
+		isom_trak_t *track_box = (isom_trak_t*)track;
+		isom_hmhd_t *hmhd = track_box->mdia->minf->hmhd;
+		uint16_t packetcount = 0;
+		memcpy(&packetcount, sample->data, sizeof(uint16_t));
+
+		uint32_t sender_report_length = sample->length - 2 * sizeof(uint16_t);
+		uint32_t packetsize = sender_report_length / packetcount;
+
+		hmhd->combinedPDUsize += sender_report_length;
+		hmhd->PDUcount += packetcount;
+
+		hmhd->maxPDUsize = hmhd->maxPDUsize > packetsize / packetcount ? hmhd->maxPDUsize : packetsize;
+
+	} // TODO: add other hint tracks
+	
+
     return func_append_sample( track, sample, sample_entry );
 }
 
