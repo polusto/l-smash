@@ -262,8 +262,8 @@ lsmash_summary_t *lsmash_duplicate_summary( importer_t *importer, uint32_t track
         case LSMASH_SUMMARY_TYPE_AUDIO :
             *(lsmash_audio_summary_t *)summary = *(lsmash_audio_summary_t *)src_summary;
             break;
-		case LSMASH_SUMMARY_TYPE_RTP_HINT:
-			*(lsmash_rtp_hint_summary_t *)summary = *(lsmash_rtp_hint_summary_t *)src_summary;
+		case LSMASH_SUMMARY_TYPE_HINT:
+			*(lsmash_hint_summary_t *)summary = *(lsmash_hint_summary_t *)src_summary;
 			break;
         default :
             lsmash_cleanup_summary( summary );

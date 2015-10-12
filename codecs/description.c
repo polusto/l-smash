@@ -273,11 +273,11 @@ static int isom_initialize_structured_codec_specific_data( lsmash_codec_specific
             specific->destruct = lsmash_free;
             break;
 		case LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTP_HINT_COMMON:
-			specific->size = sizeof(lsmash_isom_rtp_hint_common_t);
+			specific->size = sizeof(lsmash_isom_rtp_reception_hint_t);
 			specific->destruct = lsmash_free;
 			break;
 		case LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTCP_HINT:
-			specific->size = sizeof(lsmash_isom_rtcp_hint_t);
+			specific->size = sizeof(lsmash_isom_rtcp_reception_hint_t);
 			specific->destruct = lsmash_free;
 			break;
         default :
@@ -423,10 +423,10 @@ static int isom_duplicate_structured_specific_data( lsmash_codec_specific_t *dst
             *(lsmash_qt_audio_channel_layout_t *)dst_data = *(lsmash_qt_audio_channel_layout_t *)src_data;
             return 0;
 		case LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTP_HINT_COMMON:
-			*(lsmash_isom_rtp_hint_common_t *)dst_data = *(lsmash_isom_rtp_hint_common_t *)src_data;
+			*(lsmash_isom_rtp_reception_hint_t *)dst_data = *(lsmash_isom_rtp_reception_hint_t *)src_data;
 			return 0;
 		case LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTCP_HINT:
-			*(lsmash_isom_rtcp_hint_t *)dst_data = *(lsmash_isom_rtcp_hint_t *)src_data;
+			*(lsmash_isom_rtcp_reception_hint_t *)dst_data = *(lsmash_isom_rtcp_reception_hint_t *)src_data;
 			return 0;
         default :
             return LSMASH_ERR_NAMELESS;
@@ -1554,24 +1554,22 @@ static int isom_set_isom_dts_audio_description( isom_audio_entry_t *audio, lsmas
     return 0;
 }
 
-static int isom_set_rtp_reception_description(isom_hint_entry_t *hint, lsmash_rtp_hint_summary_t *summary)
+static int isom_set_rtp_reception_description(isom_hint_entry_t *hint, lsmash_hint_summary_t *summary)
 {
 	hint->hinttrackversion = summary->version;
 	hint->highestcompatibleversion = summary->highestcompatibleversion;
-	hint->maxpacketsize = summary->maxpacketsize;
+	hint->maxpacketsize = summary->maxpacketsize; // easiest might be to calculate this afterwards. Is this same as maxPDUsize?
 
 	hint->additionaldata_length = 0;
 
 	return 0;
 }
 
-static int isom_set_rtp_additional_reception_description(isom_hint_entry_t *hint, lsmash_rtp_hint_summary_t *summary)
+static int isom_set_rtp_additional_reception_description(isom_hint_entry_t *hint, lsmash_hint_summary_t *summary)
 {
-	lsmash_isom_rtp_hint_common_t *additionaldata = lsmash_malloc(sizeof(lsmash_isom_rtp_hint_common_t));
+	lsmash_isom_rtp_reception_hint_t *additionaldata = lsmash_malloc(sizeof(lsmash_isom_rtp_reception_hint_t));
 
-	/*additionaldata->timescale = summary->timescale;*/
-
-	hint->additionaldata = additionaldata;
+	hint->additionaldata = (uint8_t*)additionaldata;
 	hint->additionaldata_length = sizeof(additionaldata);
 	return 0;
 }
@@ -2278,7 +2276,7 @@ static int isom_setup_text_description( isom_stsd_t *stsd, lsmash_summary_t *sum
         return LSMASH_ERR_NAMELESS;
 }
 
-int isom_setup_hint_description(isom_stsd_t *stsd, lsmash_rtp_hint_summary_t *summary)
+int isom_setup_hint_description(isom_stsd_t *stsd, lsmash_hint_summary_t *summary)
 {
 	lsmash_codec_type_t sample_type = summary->sample_type;
 	// Set up sample description for a hint track
@@ -2296,11 +2294,9 @@ int isom_setup_hint_description(isom_stsd_t *stsd, lsmash_rtp_hint_summary_t *su
 	lsmash_codec_type_t hint_type = hint->type;
 
 
-
 	for (lsmash_entry_t *entry = summary->opaque->list.head; entry; entry = entry->next)
 	{
 		lsmash_codec_specific_t *specific = (lsmash_codec_specific_t *)entry->data;
-		/*lsmash_codec_specific_t *cs = lsmash_convert_codec_specific_format(specific, LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED);*/
 
 		if (!specific)
 		{
@@ -2316,10 +2312,20 @@ int isom_setup_hint_description(isom_stsd_t *stsd, lsmash_rtp_hint_summary_t *su
 				err = isom_set_rtp_reception_description(hint, summary);
 				err = isom_set_rtp_additional_reception_description(hint, summary);
 
-				lsmash_isom_rtp_hint_common_t* rtp_param;
-				rtp_param = (lsmash_isom_rtp_hint_common_t *)specific->data.structured;
-				isom_tims_t *tims = isom_add_tims(hint);
-				tims->timescale = rtp_param->timescale;
+				lsmash_isom_rtp_reception_hint_t* rtp_param;
+				rtp_param = (lsmash_isom_rtp_reception_hint_t *)specific->data.structured;
+
+				//mandatory field
+				if (rtp_param->timescale != 0)
+				{
+					isom_tims_t *tims = isom_add_tims(hint);
+					tims->timescale = rtp_param->timescale;
+				}
+				else
+				{
+					return LSMASH_ERR_INVALID_DATA;
+				}
+
 
 				isom_tsro_t *tsro = isom_add_tsro(hint);
 				tsro->offset = rtp_param->time_offset;
@@ -2333,8 +2339,8 @@ int isom_setup_hint_description(isom_stsd_t *stsd, lsmash_rtp_hint_summary_t *su
 		{
 			if (specific->type == LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_RTCP_HINT)
 			{
-				lsmash_isom_rtcp_hint_t* rtcp_param;
-				rtcp_param = (lsmash_isom_rtcp_hint_t *)specific->data.structured;
+				lsmash_isom_rtcp_reception_hint_t* rtcp_param;
+				rtcp_param = (lsmash_isom_rtcp_reception_hint_t *)specific->data.structured;
 				err = isom_set_rtp_reception_description(hint, summary);
 				isom_trak_t *trak = (isom_trak_t *)hint->parent->parent->parent->parent->parent;
 				isom_tref_t *tref = isom_add_tref(trak);
@@ -2365,7 +2371,7 @@ int isom_setup_sample_description( isom_stsd_t *stsd, lsmash_media_type media_ty
     else if( media_type == ISOM_MEDIA_HANDLER_TYPE_TEXT_TRACK )
         return isom_setup_text_description( stsd, (lsmash_summary_t *)summary );
     else if( media_type == ISOM_MEDIA_HANDLER_TYPE_HINT_TRACK)
-		return isom_setup_hint_description(stsd, (lsmash_rtp_hint_summary_t *)summary);
+		return isom_setup_hint_description(stsd, (lsmash_hint_summary_t *)summary);
     else
         return LSMASH_ERR_NAMELESS;
 }

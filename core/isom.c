@@ -3934,18 +3934,16 @@ static int isom_append_sample_internal
     return isom_pool_sample( current_pool, sample, samples_per_packet );
 }
 
-// stops compiler from expanding the variable
-#pragma pack(push, 1)
 typedef struct
 {
-	char trackrefindex;
+	uint8_t type;
+	int8_t trackrefindex;
 	uint16_t length;
 	uint32_t samplenumber;
 	uint32_t sampleoffset;/* indicates where the payload is located within sample*/
 	uint16_t bytesperblock;
 	uint16_t samplesperblock;
 }rtpsamplecontructor;
-#pragma pack(pop)
 
 const unsigned int RTPHEADERSIZE = 12;
 
@@ -3989,14 +3987,17 @@ int isom_append_sample_by_type
     }
 	else if (lsmash_check_codec_type_identical(sample_entry->type, ISOM_CODEC_TYPE_RRTP_HINT))
 	{
-		//calculate statistics for hmhd box
-
+		//calculate PDU statistics for hmhd box. 
+		// It requires accessing sample data to get the number of packets per sample.
 		isom_trak_t *track_box = (isom_trak_t*)track;
 		isom_hmhd_t *hmhd = track_box->mdia->minf->hmhd;
+
+		// get packetcount in this sample
 		uint16_t packetcount = 0;
 		memcpy(&packetcount, sample->data, sizeof(uint16_t));
 		uint8_t *data = sample->data + 2 * sizeof(uint16_t) + RTPHEADERSIZE;
 
+		// calculate only packet headers and packet payloads sizes int PDU size. Later use these two to get avgPDUsize
 		hmhd->combinedPDUsize += sample->length - packetcount*sizeof(rtpsamplecontructor) - 2 * sizeof(uint16_t);
 		hmhd->PDUcount += packetcount;
 
@@ -4005,14 +4006,20 @@ int isom_append_sample_by_type
 			rtpsamplecontructor cons;
 			memcpy(&cons, data, sizeof(rtpsamplecontructor));
 
-			hmhd->maxPDUsize = hmhd->maxPDUsize + RTPHEADERSIZE > cons.length + RTPHEADERSIZE ? hmhd->maxPDUsize + RTPHEADERSIZE : cons.length + RTPHEADERSIZE;
+			// constructor type
+			if (cons.type == 2)
+			{
+				// check if this packet is larger than any of the previous ones. cons.length is payload size. TODO: May need to take account different 
+				// RTP header lengths in case of extensions
+				hmhd->maxPDUsize = hmhd->maxPDUsize > cons.length + RTPHEADERSIZE ? hmhd->maxPDUsize : cons.length + RTPHEADERSIZE;
 
-			data += sizeof(rtpsamplecontructor) + RTPHEADERSIZE;
+				data += sizeof(rtpsamplecontructor) + RTPHEADERSIZE;
+			} // TODO: other constructor types
 		}
 	}
 	else if (lsmash_check_codec_type_identical(sample_entry->type, ISOM_CODEC_TYPE_RTCP_HINT))
 	{
-		//calculate statistics for hmhd box
+		//calculate PDU statistics for hmhd box
 		isom_trak_t *track_box = (isom_trak_t*)track;
 		isom_hmhd_t *hmhd = track_box->mdia->minf->hmhd;
 		uint16_t packetcount = 0;
@@ -4286,6 +4293,8 @@ char          *sdptext
 
 	hnti = udta->hnti;
 
+	// if track ID is given, text is meant for track hnti box, 
+	// otherwise it is meant for movie hnti box
 	if (track_ID)
 	{
 		if (!isom_add_sdp(hnti))
@@ -4301,7 +4310,7 @@ char          *sdptext
 			return LSMASH_ERR_NAMELESS;
 
 		isom_rtp_t* rtp = hnti->rtp;
-		rtp->descriptionformat = 'sdp ';
+		rtp->descriptionformat = '\x73\x64\x70'; //'sdp '
 		rtp->sdp_length = strlen(sdptext); /* leaves \0 out*/
 		rtp->sdptext = lsmash_memdup(sdptext, rtp->sdp_length);
 	}

@@ -46,7 +46,7 @@ int isom_setup_sample_description
 int isom_setup_rtp_hint_description
 (
 	isom_stsd_t      *stsd,
-	lsmash_rtp_hint_summary_t *summary
+	lsmash_hint_summary_t *summary
 );
 
 lsmash_summary_t *isom_create_video_summary_from_description

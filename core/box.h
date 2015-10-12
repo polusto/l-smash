@@ -369,7 +369,7 @@ typedef struct
     uint32_t avgBitrate;        /* the average rate in bits/second over the entire presentation */
     uint32_t reserved;
 
-	// temp variables for calculating avgPDUsize and maxPDUsize
+	// temp variables for calculating avgPDUsize
 	uint64_t combinedPDUsize;
 	uint64_t PDUcount;
 
@@ -802,7 +802,6 @@ typedef struct
     uint16_t hinttrackversion; \
 	uint16_t highestcompatibleversion; \
 	uint32_t maxpacketsize; \
-	uint32_t timescale; \
 	uint8_t *additionaldata
 
 typedef struct

@@ -637,34 +637,12 @@ static int isom_write_hint_description(lsmash_bs_t *bs, isom_box_t *box)
 	lsmash_bs_put_be16(bs, data->highestcompatibleversion);
 	lsmash_bs_put_be32(bs, data->maxpacketsize);
 
-	if (data->timescale != 0)
-	{
-		isom_bs_put_box_common(bs, data->timescale);
-		lsmash_bs_put_be32(bs, data->timescale);
-	}
-	if (data->additionaldata_length != 0)
-	{
-
-		//isom_bs_put_box_common(bs, data);
-		//isom_bs_put_box_common(bs, data);
-	}
+	// additional data/boxes are written separately
 
 	return 0;
 }
 
 #if 0
-static int isom_write_hint_description( lsmash_bs_t *bs, lsmash_entry_t *entry )
-{
-    isom_hint_entry_t *data = (isom_hint_entry_t *)entry->data;
-    if( !data )
-        return LSMASH_ERR_NAMELESS;
-    isom_bs_put_box_common( bs, data );
-    lsmash_bs_put_bytes( bs, 6, data->reserved );
-    lsmash_bs_put_be16( bs, data->data_reference_index );
-    if( data->data && data->data_length )
-        lsmash_bs_put_bytes( bs, data->data_length, data->data );
-    return 0;
-}
 
 static int isom_write_metadata_description( lsmash_bs_t *bs, lsmash_entry_t *entry )
 {

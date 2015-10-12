@@ -904,7 +904,7 @@ typedef enum
     LSMASH_SUMMARY_TYPE_UNKNOWN = 0,
     LSMASH_SUMMARY_TYPE_VIDEO,
 	LSMASH_SUMMARY_TYPE_AUDIO,
-	LSMASH_SUMMARY_TYPE_RTP_HINT,
+	LSMASH_SUMMARY_TYPE_HINT,
 } lsmash_summary_type;
 
 typedef enum
@@ -1426,8 +1426,8 @@ typedef struct
 	LSMASH_BASE_SUMMARY
 	uint16_t version;
 	uint16_t highestcompatibleversion;
-	uint32_t maxpacketsize;
-} lsmash_rtp_hint_summary_t;
+	uint32_t maxpacketsize; // maximum size of one packet
+} lsmash_hint_summary_t;
 
 /****************************************************************************
  * Media Sample
@@ -4129,17 +4129,18 @@ int set_reception_timestamp_synchrony(timestamp_sync_t sync);
 
 int set_reception_hint_offset(int32_t offset);
 
-typedef struct
-{
-	uint32_t timescale;
-	uint32_t time_offset;
-	uint8_t reserved_timestamp_sync;
-} lsmash_isom_rtp_hint_common_t;
 
 typedef struct
 {
-	uint32_t rtp_track_id;
-} lsmash_isom_rtcp_hint_t;
+	uint32_t timescale; // timscale of this track
+	uint32_t time_offset; // Beginning time stamp offset compared to 
+	uint8_t reserved_timestamp_sync; // first 6 bits = 0, last two indicate whether tracks have been synchronized
+} lsmash_isom_rtp_reception_hint_t;
+
+typedef struct
+{
+	uint32_t rtp_track_id; // which track this RTCP track is referencing
+} lsmash_isom_rtcp_reception_hint_t;
 
 
 #ifdef _WIN32
